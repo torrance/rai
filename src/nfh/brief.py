@@ -64,6 +64,17 @@ def _left_off(project: Project) -> str:
     return "\n".join(lines)
 
 
+def _decision_section(decisions: list[dict], limit: int) -> str:
+    lines = ["## Decisions"]
+    for decision in decisions:
+        text = _clip(" ".join(decision["text"].split()), limit)
+        refs = _clip(" ".join((decision.get("refs") or "").split()), 120)
+        lines.append(
+            f"- {decision['id']}: {text}" + (f" [{refs}]" if refs else "")
+        )
+    return "\n".join(lines)
+
+
 def build_brief(project: Project) -> str:
     project_md = _read(project.project_md)
     thesis = _section(project_md, "Thesis") or _first_paragraph(project_md)
@@ -120,15 +131,10 @@ def build_brief(project: Project) -> str:
         + stale,
     ]
     decisions = ledger.list_decisions(project)
+    decision_index: int | None = None
     if decisions:
-        decision_lines = ["## Decisions"]
-        for decision in decisions:
-            text = " ".join(decision["text"].split())
-            refs = " ".join((decision.get("refs") or "").split())
-            decision_lines.append(
-                f"- {decision['id']}: {text}" + (f" [{refs}]" if refs else "")
-            )
-        parts.append("\n".join(decision_lines))
+        decision_index = len(parts)
+        parts.append(_decision_section(decisions, 240))
     where_index = len(parts)
     parts.append(
         "## Where to look\n"
@@ -148,6 +154,12 @@ def build_brief(project: Project) -> str:
             draft_lines + ["- (more in the map)"]
         )
         text = "\n\n".join(parts) + "\n"
+    if decision_index is not None:
+        for limit in (120, 60):
+            if estimate_tokens(text) <= BUDGET_TOKENS:
+                break
+            parts[decision_index] = _decision_section(decisions, limit)
+            text = "\n\n".join(parts) + "\n"
     project.brief_path.parent.mkdir(parents=True, exist_ok=True)
     project.brief_path.write_text(text, encoding="utf-8")
     return text

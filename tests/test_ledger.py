@@ -255,6 +255,17 @@ def test_the_briefing_includes_all_active_decisions(project):
     assert text.index("## Decisions") < text.index("## Where to look")
 
 
+def test_many_long_decisions_stay_within_the_briefing_budget(project):
+    from nfh.brief import BUDGET_TOKENS, build_brief
+    from nfh.config import estimate_tokens
+
+    for n in range(30):
+        ledger.record_decision(project, f"Decision {n} " + "word " * 300)
+    text = build_brief(project)
+    assert estimate_tokens(text) < BUDGET_TOKENS
+    assert "D1:" in text and "D30:" in text
+
+
 def test_a_very_long_summary_is_clipped_in_the_briefing(project):
     from nfh.brief import BUDGET_TOKENS, build_brief
     from nfh.config import estimate_tokens
