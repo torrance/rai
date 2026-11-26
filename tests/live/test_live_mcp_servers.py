@@ -103,6 +103,11 @@ def _allowed(project, server: str, names: set[str]) -> dict[str, set[str]]:
 def test_zotero_server_and_agents_get_read_tools_only(scratch_project):
     names, _ = _tools(scratch_project, "zotero")
     assert names, "zotero-mcp started but exposes no tools"
+    assert "zotero_semantic_search" not in names, (
+        "the template installs zotero-mcp without its [semantic] extra; nfh's "
+        "search_passages is the project's passage search. If you enable Zotero "
+        "semantic search on purpose, grant it and update the agents' guidance."
+    )
     allowed = _allowed(scratch_project, "zotero", names)
     for agent, tools in allowed.items():
         writes = sorted(t for t in tools if any(w in t for w in WRITE_WORDS))

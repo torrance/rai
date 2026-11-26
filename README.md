@@ -394,6 +394,12 @@ versions are pinned in each project's `opencode.jsonc`. OpenCode 2 also runs a
 background service, so the first command in a project can take a moment before
 its servers show as connected.
 
+nfh's own `search_passages` tool is the full-text passage search over the
+project's ingested library (the Zotero scope and `sources-local/`). The Zotero
+MCP server is for item metadata, annotations and library management; the pinned
+install has no Zotero semantic search, so use `search_passages` to find what the
+sources say about a topic.
+
 ### 6. Check everything
 
 ```bash
@@ -999,8 +1005,10 @@ with the old prompt as stale.
   until then. Commit the updated lock if you keep the harness in git.
 - **Pinned community servers:** `zotero-mcp-server==0.17.3` and
   `paper-search-mcp==0.1.4`. paper-search-mcp needs `mcp<2`, which the
-  template's `uvx --with "mcp<2"` provides. Rerun `nfh selftest --only mcp`
-  after changing either pin.
+  template's `uvx --with "mcp<2"` provides. The Zotero server is installed
+  without its optional `[semantic]` extra, so its semantic-search tool is
+  absent; `search_passages` covers passage search. Rerun
+  `nfh selftest --only mcp` after changing either pin.
 - **Zotero linked files** stored relative to a base directory
   (`attachments:` paths) aren't resolved yet; stored files and absolute
   linked files are.

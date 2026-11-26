@@ -30,6 +30,18 @@ def test_server_exposes_the_tools(project):
     }
 
 
+def test_search_passages_description_names_its_scope(project):
+    """A model looking for semantic search should land here, not on Zotero."""
+    server = make_server(project)
+    tool = next(
+        t for t in anyio.run(server.list_tools) if t.name == "search_passages"
+    )
+    description = tool.description.lower()
+    assert "semantic" in description
+    assert "zotero" in description
+    assert "read_location" in description
+
+
 def call(server, name, **arguments):
     return anyio.run(lambda: server.call_tool(name, arguments))
 

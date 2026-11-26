@@ -31,8 +31,11 @@ the writer has decided. How the tools fit together:
 - Maps point, sources prove. Cards (read_card) and the notes from read_notes
   tell you where to look. Anything you state as fact about a source must come
   from read_location, and every quotation must pass verify_quote first.
-- Find passages with search_passages (kind="card" searches what sources are
-  about; the default searches their text). Pass sources=["key", ...] to stay in
+- Search passages with search_passages: it is this project's semantic + keyword
+  search over the ingested library, and the only passage search here. Zotero's
+  tools find items by metadata or read one known item; there is no Zotero
+  semantic search in this setup. kind="card" finds what sources are
+  about; the default searches their text. Pass sources=["key", ...] to stay in
   named works and per_source_limit=2 to stop one long book filling a
   library-wide search. Then read_location around the best hits before
   summarising. read_location(cite_key, "toc") gives a source's full heading
@@ -66,13 +69,26 @@ def make_server(project: Project) -> FastMCP:
         sources: list[str] | None = None,
         per_source_limit: int = 0,
     ) -> list[dict]:
-        """Hybrid (meaning + keyword) search of the library.
+        """Semantic + keyword search over the project's ingested library.
 
-        kind="text" searches passages; kind="card" searches source cards.
-        sources restricts the search to those cite keys (omit for the whole
-        library). per_source_limit caps hits per source (0 = no cap), which
-        keeps one long book from filling a library-wide result.
-        Returns citations, locations and ~150-word snippets.
+        This is the passage search for the writer's sources: everything nfh has
+        ingested (the project's Zotero scope and sources-local/), not just
+        Zotero metadata. The Zotero tools find items or read one known item;
+        they do not provide a library passage search.
+
+        kind="text" (default) searches passages; kind="card" searches source
+        cards, which is the quick way to find which sources are about a topic.
+        limit caps results (at most 20). sources restricts the search to those
+        cite keys or numeric source ids (omit for the whole library); an unknown
+        key returns [{"error": ...}]. per_source_limit caps hits per source
+        (0 = no cap); use 2 for a library-wide sweep so one long book does not
+        fill the results.
+
+        Returns a ranked list of dicts with citation, cite_key, source_id,
+        title, authors, year, location, first_block, heading_path and snippet.
+        Snippets are cut to about 150 words, so call read_location around a hit
+        before summarising or quoting. An empty list means nothing in the
+        indexed library matches (or the project has not been ingested yet).
         """
         s = store()
         try:

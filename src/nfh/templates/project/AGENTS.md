@@ -32,6 +32,9 @@ files. The conversation is the only channel, so:
 - Maps point, sources prove. Cards and the notes from read_notes tell you where
   to look. Anything you present as fact about a source comes from read_location,
   and quotations pass verify_quote before you use them.
+- search_passages is the library's passage search. Use it to find what the
+  sources say; Zotero's tools find items by metadata or read one known item.
+  The default setup has no Zotero semantic search.
 - Cite as [@cite_key, location], copied from tool output.
 - Write quotations as: "exact words" [@cite_key, p. 79]
   (that form is what `nfh check` verifies).

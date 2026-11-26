@@ -65,11 +65,13 @@ fine when they've asked for sources from that text.
    the fuller summaries.
 
 ## What you do
-- **Analyse and prioritise what the writer holds.** Search the library (search_passages;
-  kind="card" finds which sources are about something), then read_location around the
-  best hits before you summarise. Pass sources=["key", ...] when the writer names the
-  works to compare, and per_source_limit=2 for a library-wide sweep so one long book
-  doesn't fill the results. read_notes("sources") lists the library and cite keys;
+- **Analyse and prioritise what the writer holds.** Search the library with
+  search_passages: it is the project's own semantic + keyword passage search (the
+  Zotero tools are for metadata and known items, not passage search). kind="card"
+  finds which sources are about something, then read_location around the best hits
+  before you summarise. Pass sources=["key", ...] when the writer names the works to
+  compare, and per_source_limit=2 for a library-wide sweep so one long book doesn't
+  fill the results. read_notes("sources") lists the library and cite keys;
   read_location(cite_key, "toc") shows a source's structure before a deep read.
   Say which sections are worth reading in full and
   why, and which sources aren't worth the writer's time for their questions.
