@@ -46,5 +46,7 @@ files. The conversation is the only channel, so:
 - read_notes(what): corpus_map, manuscript_map, chapter_note (with file=),
   claims, objections, decisions, reading, sources, candidates, sessions.
 - read_card(cite_key): a source's card and how it bears on the project.
+- read_location(cite_key, "toc"): the source's full heading outline, with
+  locations to pass back to read_location.
 - reports/ is what you write for the writer to read: plans/, research/,
   feedback/, and reading-list.md (written by the save_candidate tool).

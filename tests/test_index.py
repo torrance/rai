@@ -133,6 +133,66 @@ def test_search_can_be_restricted_and_balanced_across_sources(project, fake_olla
     store.close()
 
 
+def test_read_location_toc_returns_the_heading_outline(project):
+    store = Store(project)
+    cur = store.conn.execute(
+        "INSERT INTO sources(key, title, cite_key) VALUES('local:toc', 'Book', 'b')"
+    )
+    source_id = cur.lastrowid
+    rows = [
+        (source_id, 0, "Preface", "Preface", 1, "i"),
+        (source_id, 1, "Preface > Chapter 1", "Chapter 1", 2, "1"),
+        (source_id, 2, "Preface > Chapter 1 > Section 1.1", "Section 1.1", 3, "2"),
+    ]
+    store.conn.executemany(
+        "INSERT INTO blocks(source_id, seq, kind, heading_path, text, "
+        "page_index, page_label) VALUES(?,?,?,?,?,?,?)",
+        [
+            (sid, seq, "heading", path, text, page, label)
+            for sid, seq, path, text, page, label in rows
+        ],
+    )
+    store.conn.commit()
+    toc = read_location(store, source_id, "toc")
+    assert toc["range"] == "toc" and toc["cite_key"] == "b"
+    assert [h["level"] for h in toc["headings"]] == [1, 2, 3]
+    assert [h["location"] for h in toc["headings"]] == ["p. i", "p. 1", "p. 2"]
+    assert "  - Chapter 1 (p. 1)" in toc["text"]
+    assert read_location(store, source_id, "TOC")["headings"] == toc["headings"]
+    store.close()
+
+
+def test_read_location_toc_handles_sources_without_headings(project):
+    store = Store(project)
+    cur = store.conn.execute(
+        "INSERT INTO sources(key, title, cite_key) VALUES('local:plain', 'P', 'p')"
+    )
+    source_id = cur.lastrowid
+    store.conn.execute(
+        "INSERT INTO blocks(source_id, seq, kind, text, para) "
+        "VALUES(?, 0, 'paragraph', 'No headings here.', 1)",
+        (source_id,),
+    )
+    store.conn.commit()
+    toc = read_location(store, source_id, "toc")
+    assert toc["headings"] == [] and "No headings were extracted" in toc["text"]
+    assert "error" in read_location(store, "missing", "toc")
+    store.close()
+
+
+def test_toc_for_markdown_uses_seq_locations(project, fake_ollama):
+    _ingest(project)
+    store = Store(project)
+    toc = read_location(store, "writer2024", "toc")
+    assert [h["title"] for h in toc["headings"]] == [
+        "Labour and platforms",
+        "Introduction",
+        "Evidence",
+    ]
+    assert all(h["location"].startswith("seq:") for h in toc["headings"])
+    store.close()
+
+
 def test_read_notes_sources_inventory(project, fake_ollama):
     _ingest(project)
     ledger.set_reading_status(project, "writer2024", "read")

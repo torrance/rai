@@ -343,6 +343,44 @@ def format_blocks(
     return "\n\n".join(out), shown, truncated
 
 
+def outline(store: Store, source_ref: str | int) -> dict[str, Any]:
+    """Every extracted heading with a location the agent can read next."""
+    source = store.source(source_ref)
+    if source is None:
+        return {"error": f"No source matches {source_ref!r}."}
+    rows = store.conn.execute(
+        "SELECT * FROM blocks WHERE source_id=? AND kind='heading' ORDER BY seq",
+        (source["id"],),
+    ).fetchall()
+    headings = []
+    lines = []
+    for row in rows:
+        path = row["heading_path"] or row["text"] or ""
+        level = path.count(" > ") + 1
+        location = loc_label([row]) or f"seq:{row['seq']}"
+        headings.append(
+            {
+                "level": level,
+                "title": row["text"],
+                "location": location,
+                "seq": row["seq"],
+            }
+        )
+        lines.append(f"{'  ' * (level - 1)}- {row['text']} ({location})")
+    text = "\n".join(lines) if lines else (
+        "No headings were extracted for this source. Use page, paragraph or "
+        "seq: locations instead."
+    )
+    return {
+        "source_id": source["id"],
+        "cite_key": source["cite_key"],
+        "title": source["title"],
+        "range": "toc",
+        "headings": headings,
+        "text": text,
+    }
+
+
 def read_location(
     store: Store,
     source_ref: str | int,
@@ -353,12 +391,14 @@ def read_location(
     source = store.source(source_ref)
     if source is None:
         return {"error": f"No source matches {source_ref!r}."}
+    if (loc or "").strip().casefold() == "toc":
+        return outline(store, source_ref)
     span = resolve_location(store, source["id"], loc)
     if span is None:
         return {
             "error": f"Couldn't find location {loc!r} in {source['cite_key']}. "
-            "Use the location from a search result, e.g. 'p. 79', 'ch. 4 para 12' "
-            "or 'seq:120'."
+            "Use the location from a search result, e.g. 'p. 79', 'ch. 4 para 12', "
+            "'seq:120', or 'toc' for the source's outline."
         }
     first, last = widen(store, source["id"], *span, radius=radius)
     blocks = store.blocks(source["id"], first, last)

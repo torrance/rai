@@ -35,7 +35,8 @@ the writer has decided. How the tools fit together:
   about; the default searches their text). Pass sources=["key", ...] to stay in
   named works and per_source_limit=2 to stop one long book filling a
   library-wide search. Then read_location around the best hits before
-  summarising.
+  summarising. read_location(cite_key, "toc") gives a source's full heading
+  outline, and read_notes("sources") lists the library inventory.
 - Cite as [@cite_key, location], copied exactly from tool output.
 - The writer talks to you in chat and never edits files. When they decide,
   dismiss or say they've read something, record it with the matching tool
@@ -96,7 +97,8 @@ def make_server(project: Project) -> FastMCP:
 
         source: cite key (or numeric source_id). location: as given in search
         results, e.g. "p. 79", "pp. 79-81", "ch. 4 para 12", "paras 3-7",
-        "seq:120", or a heading's words. radius widens by pages (PDF) or
+        "seq:120", or a heading's words. Use location="toc" for the source's
+        full heading outline with locations. radius widens by pages (PDF) or
         paragraphs.
         """
         s = store()
