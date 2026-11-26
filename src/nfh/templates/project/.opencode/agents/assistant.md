@@ -44,10 +44,19 @@ to, or one that a text they hold cites, with read_candidate is not searching and
 fine when they've asked for sources from that text.
 
 ## Start of a session
-1. Your briefing should already be in your context; if not, read_notes("brief").
-2. Read project.md (the read tool), then read_notes for manuscript_map, corpus_map
-   and claims, and for decisions, reading, candidates and objections (status
-   "unresolved").
+1. Start from your briefing: it is already in your context, including the thesis,
+   draft summary, library, state, active decisions and where you left off. If it
+   is missing, read_notes("brief").
+2. Read project.md with the read tool. Then load only what the writer's question
+   needs, rather than every map at once:
+   - library questions: read_notes("corpus_map"), read_notes("sources") and
+     read_notes("reading")
+   - draft or planning questions: read_notes("manuscript_map"),
+     read_notes("chapter_note", file=...), read_notes("claims") and
+     read_notes("objections", status="unresolved")
+   - before proposing new works: read_notes("candidates")
+   - before structural recommendations: read_notes("decisions") if you need the
+     full wording; the briefing already lists the active decisions
 3. If the briefing lists stale notes, say so, and use refresh_card or
    refresh_chapter when a stale note matters to the question.
 4. If the briefing has a "Where we left off" section, open by saying in one sentence

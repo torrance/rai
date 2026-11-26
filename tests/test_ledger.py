@@ -240,6 +240,21 @@ def test_the_briefing_says_where_we_left_off(project):
     assert "Rewriting para 14" not in text  # only the latest session's
 
 
+def test_the_briefing_includes_all_active_decisions(project):
+    from nfh.brief import build_brief
+
+    ledger.record_decision(project, "Keep the Weber comparison", "ch. 3")
+    ledger.record_decision(project, "Drop the survey")
+    temporary = ledger.record_decision(project, "Temporary choice")
+    ledger.revoke_decision(project, temporary["id"])
+    text = build_brief(project)
+    assert "## Decisions" in text
+    assert "- D1: Keep the Weber comparison [ch. 3]" in text
+    assert "- D2: Drop the survey" in text
+    assert "Temporary choice" not in text
+    assert text.index("## Decisions") < text.index("## Where to look")
+
+
 def test_a_very_long_summary_is_clipped_in_the_briefing(project):
     from nfh.brief import BUDGET_TOKENS, build_brief
     from nfh.config import estimate_tokens

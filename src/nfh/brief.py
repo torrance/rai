@@ -119,11 +119,21 @@ def build_brief(project: Project) -> str:
         )
         + stale,
     ]
+    decisions = ledger.list_decisions(project)
+    if decisions:
+        decision_lines = ["## Decisions"]
+        for decision in decisions:
+            text = " ".join(decision["text"].split())
+            refs = " ".join((decision.get("refs") or "").split())
+            decision_lines.append(
+                f"- {decision['id']}: {text}" + (f" [{refs}]" if refs else "")
+            )
+        parts.append("\n".join(decision_lines))
     where_index = len(parts)
     parts.append(
         "## Where to look\n"
         "- read_notes: corpus_map, manuscript_map, chapter_note (file=), claims, "
-        "objections, decisions, reading, candidates\n"
+        "objections, decisions, reading, sources, candidates\n"
         "- read_card: a source's card\n"
         "- The writer's decisions reach you only through conversation: record "
         "them with the tools as they are made"
