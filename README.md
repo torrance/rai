@@ -135,7 +135,8 @@ that once. To turn it off: `git config --unset core.hooksPath`.
 
 These steps assume Linux, as in the design sketch, and two machines:
 
-- **The Ollama server** runs the chat and embedding models on its GPUs.
+- **The Ollama server** runs the default embedding model, plus any chat stages
+  you choose to keep local, on its GPUs.
 - **Your writing machine** runs everything else: the harness, OpenCode, Zotero
   and pandoc. It reaches Ollama over the network (for example a port forward)
   and **runs no GPU code**. The only local model work is Docling's PDF layout
@@ -143,14 +144,16 @@ These steps assume Linux, as in the design sketch, and two machines:
 
 | Runs on the Ollama server | Runs on your writing machine |
 | --- | --- |
-| Any stage models you keep local (reading, summarising, research, sparring) | OpenCode and the agents' tool calls |
-| A local embedding model, if you use one | nfh: index (SQLite), search, quote checks, notes |
+| `qwen3-embedding:8b-q4_K_M` (the default embedding model) | OpenCode and the agents' tool calls |
+| Any chat stages you keep local (reading, summarising, research, sparring) | nfh: index (SQLite), search, quote checks, notes |
 | | Zotero and its local API; pandoc |
 | | Docling's PDF layout models (CPU only) |
 | | zotero-mcp, paper-search-mcp (no models) |
 
-Stage models that use OpenCode Go run on OpenCode's servers instead and need
-`OPENCODE_API_KEY` in `.env`.
+The shipped defaults put all four chat stages on OpenCode Go and keep
+embeddings on Ollama. OpenCode Go stages run on OpenCode's servers and need
+`OPENCODE_API_KEY` (or `OPENCODE_GO_API_KEY`) in `.env`. Any stage can be moved
+between Ollama and OpenCode Go by changing its reference.
 
 If Ollama does run on the same machine, nothing changes except that the
 forward isn't needed.
@@ -195,13 +198,19 @@ Then:
 
 ```bash
 sudo systemctl daemon-reload && sudo systemctl restart ollama
+ollama pull qwen3-embedding:8b-q4_K_M
+```
+
+That is the only model the shipped defaults need on Ollama. If you also want
+to keep a chat stage local, pull one and check it:
+
+```bash
 ollama pull qwen3.8-flash-next:125b-a6b-q4_K_M
-ollama pull qwen3-embedding:0.6b
 ollama run qwen3.8-flash-next:125b-a6b-q4_K_M "hello" && ollama ps
 ```
 
-`ollama ps` should show the model at **100% GPU**. If part of it is on the
-CPU, lower `OLLAMA_CONTEXT_LENGTH` to 196608, then 131072, and set
+`ollama ps` should show a local chat model at **100% GPU**. If part of it is
+on the CPU, lower `OLLAMA_CONTEXT_LENGTH` to 196608, then 131072, and set
 `num_ctx` to match in `config.local.toml` ([Configuration](#configuration)).
 
 With one parallel slot, agents, subagents and `nfh` jobs take turns step by
@@ -227,8 +236,9 @@ already matches and there is nothing to record.
 
 #### Without admin rights on the server
 
-The context length can be attached to a model instead of the server.
-`ollama create` needs no admin rights and copies no weights:
+If you keep any chat stage on Ollama, the context length can be attached to a
+model instead of the server. `ollama create` needs no admin rights and copies
+no weights:
 
 ```bash
 cat > Modelfile <<'EOF'
@@ -287,28 +297,26 @@ Fill in `.env`:
 
 #### Your settings
 
-The Ollama address, the models and the context aren't in `.env`. They are in
-`config.toml`, already filled in with the defaults. Put only what differs for
-your setup in a new file, `config.local.toml`, in this folder. For example,
-with a port forward on 11435 and the 128K model variant from step 2:
+The Ollama address, the stage models and the context aren't in `.env`. They
+are in `config.toml`, already filled in with the current defaults (OpenCode Go
+chat stages and the local 8B embedding model). Put only what differs for your
+setup in a new file, `config.local.toml`, in this folder. For example, to use a
+port forward on 11435 and keep summarising on a local Ollama model:
 
 ```toml
 [ollama]
 host = "http://127.0.0.1:11435"
 
 [models]
-reading = "opencode-go/deepseek-v4.1-flash"
-summarising = "opencode-go/claude-haiku-5-5"
-research = "opencode-go/gemini-4-argon"
-sparring = "opencode-go/gemini-4-argon"
-embedding = "ollama/qwen3-embedding:8b-q4_K_M"
-embedding_dims = 4096
+summarising = "ollama/qwen3.8-flash-next:125b-a6b-q4_K_M"
 num_ctx = 131072
 ```
 
 Model references are `provider/model`, optionally with `#variant`; a bare name
 means Ollama. The providers are `ollama` and `opencode-go`. All five stages are
-required: nfh never falls back from one to another.
+required: nfh never falls back from one to another. Variants apply to OpenCode
+agent turns; nfh's own pipeline calls use the base model, and the embedding
+stage takes no variant.
 
 If the defaults suit you, skip the file. Check what is in force:
 
@@ -419,7 +427,7 @@ warnings in the summary at the end.
 | Area | What's verified |
 | --- | --- |
 | **Local machine** | No CUDA packages installed; PyTorch is a CPU-only build (not CUDA or ROCm); Docling's models are cached inside the harness; which Ollama server the harness reaches |
-| **Models** | Every local stage model is pulled; the research model has tool and completion capabilities and sits 100% on the GPU; Ollama's default context equals `[models] num_ctx` (skipped when it is 0) (otherwise the model reloads every time agents and jobs take turns); JSON-schema output; 9/10 well-formed tool calls through `/v1`, the endpoint OpenCode uses; the `reasoning_effort` field the `quick` variant sends; embedding dimensions and sense. `--slow`: recall of a fact buried mid-way through a long prompt |
+| **Models** | Every local stage model is pulled; OpenCode Go stages are exercised by the live pipeline and agent tests (`--slow`, `--agents`); a local research model, when used, has tool and completion capabilities and sits 100% on the GPU; Ollama's default context equals `[models] num_ctx` (skipped when it is 0) (otherwise the model reloads every time agents and jobs take turns); JSON-schema output; 9/10 well-formed tool calls through `/v1`, the endpoint OpenCode uses; the `reasoning_effort` field the `quick` variant sends; embedding dimensions and sense. `--slow`: recall of a fact buried mid-way through a long prompt |
 | **Zotero** | Local API answers; storage folder exists. With `--project`: scope isn't empty, items have files on disk, citation keys present in Zotero's own field (not made up by nfh) and unique, `tag_match` modes consistent, `references.bib` contains every key |
 | **Extraction** | Docling installed and used, with printed page labels kept. With `--project`: a real PDF from the scope extracts with headings |
 | **Scholarly APIs** | OpenAlex key accepted; Unpaywall email works; TinyFish key present; the candidate reader fetches a real open-access article in full |
@@ -480,9 +488,9 @@ set it.
   `embedding_dims` to the embedding model's native size.
 - **Using OpenCode Go:** put `OPENCODE_API_KEY` (or `OPENCODE_GO_API_KEY`) in
   `.env` and name a stage `opencode-go/<model-id>`. The same key serves
-  OpenCode's built-in
-  `opencode-go` provider and nfh's own pipeline and embedding calls. If
-  OpenCode doesn't pick the key up, run `/connect` once and choose OpenCode Go;
+  OpenCode's built-in `opencode-go` provider and nfh's own pipeline calls (and
+  any embedding stage you move to Go). If OpenCode doesn't pick the key up,
+  run `/connect` once and choose OpenCode Go;
   `nfh open` loads `.env` into its environment. A variant can be selected with
   `#`, for example `opencode-go/<model-id>#low`. Variants apply to OpenCode
   agent turns; nfh's own pipeline calls use the base model. The embedding
@@ -844,7 +852,7 @@ Run any command inside a project, or pass `--project PATH` first:
 | Command | What it does |
 | --- | --- |
 | `nfh new NAME [--title T] [--collection C] [--tag T ...] [--path P] [--no-git]` | Create a project from the template |
-| `nfh doctor` | Check Ollama, models (listing what the server has if a name is missing), Zotero, pandoc, sqlite-vec, OpenCode, keys, and that project files match the settings |
+| `nfh doctor` | Check Ollama and the OpenCode Go model list, every stage model (local and OpenCode Go), keys, Zotero, pandoc, sqlite-vec, OpenCode, and that project files match the settings |
 | `nfh config` | Show every setting in force and which file set it |
 | `nfh show WHAT [--file F] [--status S] [--limit N]` | Print an internal note: brief, corpus_map, manuscript_map, chapter_note, claims, objections, decisions, reading, candidates, sessions |
 | `nfh sync [--check] [--force] [--all]` | Bring `opencode.jsonc`, `AGENTS.md`, the agent and command files and the git hook up to date, keeping your edits |
@@ -883,12 +891,14 @@ have left it, so a one-off `--tag` run never deletes anything.
   run without one, which limits their results). Databases cover every field, so
   expect the odd off-topic result even from the right sources; the assistant is told to
   skip them.
-- **A long pause after switching agents.** The server is re-reading the whole
+- **A long pause after switching agents.** The model is re-reading the whole
   conversation, because a different agent means a different start to the prompt
   (see [Working with the agents](#working-with-the-agents)). Start a new session
-  with `/new` instead. The pause is roughly the conversation's length in tokens
-  divided by your server's prompt-reading speed; `ollama run <model> --verbose`
-  prints that speed as "prompt eval rate".
+  with `/new` instead. For a local model, the pause is roughly the conversation's
+  length in tokens divided by your server's prompt-reading speed;
+  `ollama run <model> --verbose` prints that speed as "prompt eval rate". With
+  OpenCode Go stages, the pause is provider latency and the model's own
+  time-to-first-token.
 - **An agent didn't record something I told it.** It should confirm each
   recording in one line. If it didn't, say "record that", or run `/wrap`. Check
   with `nfh show objections` (or `decisions`, `reading`, `candidates`). Recording
@@ -908,17 +918,21 @@ have left it, so a one-off `--tag` run never deletes anything.
 - **`uv sync` can't reach `download.pytorch.org`:** that index serves the
   CPU-only PyTorch. Allow it on your network, or use `--pdf-engine pymupdf`
   and remove Docling, torch and torchvision from `pyproject.toml`.
-- **Responses are slow, or `ollama ps` shows CPU:** lower the context length
-  (setup step 2) and `[models] num_ctx` to match.
-- **Agents skip tools or tool calls come back malformed:** check Ollama
-  first: `curl` a tool-calling request to `http://127.0.0.1:11434/v1/chat/completions`.
-  If Ollama is the problem, LM Studio or vLLM also serve this model, and
-  OpenCode discovers both. Changing `"codemode": false` to `true` on a server
-  in `opencode.jsonc` is also worth one try.
-- **OpenCode hangs, or lists the wrong models:** it may be talking to a
-  different Ollama than nfh. `nfh config` prints both addresses, and
-  `nfh sync --check` tells you if `opencode.jsonc` lags them. `headerTimeout`
-  is already off for Ollama.
+- **Responses are slow for a local stage, or `ollama ps` shows CPU:** lower the
+  context length (setup step 2) and `[models] num_ctx` to match.
+- **Agents skip tools or tool calls come back malformed:** for local stages,
+  check Ollama with a tool-calling request to
+  `http://127.0.0.1:11434/v1/chat/completions`. If Ollama is the problem,
+  LM Studio or vLLM also serve this model, and OpenCode discovers both. For
+  OpenCode Go stages, run `nfh doctor` and, if OpenCode itself is not
+  authenticated, `/connect` once. Changing `"codemode": false` to `true` on a
+  server in `opencode.jsonc` is also worth one try.
+- **OpenCode hangs, or lists the wrong models:** for local stages it may be
+  talking to a different Ollama than nfh. `nfh config` prints both addresses,
+  and `nfh sync --check` tells you if `opencode.jsonc` lags them.
+  `headerTimeout` is already off for Ollama. For OpenCode Go stages, run
+  `nfh doctor` and check the provider connection with `/connect`; the models
+  must be enabled for the current project.
 - **The `quick` variant errors:** set `[opencode] quick_reasoning_effort = ""`
   (or a value your Ollama accepts) and run `nfh sync --all`.
 - **`nfh doctor` says project files are out of date:** run `nfh sync`. If it
