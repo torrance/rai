@@ -255,6 +255,38 @@ def test_combine_batches_long_books(project, monkeypatch):
     assert "Further unit readings" in calls[1][1]
 
 
+def test_render_map_escapes_pipes_and_avoids_an_empty_gap(project):
+    m = {
+        "overview": "o",
+        "themes": [],
+        "debates": [],
+        "coverage": [
+            {
+                "question": "A | B",
+                "rating": "thin",
+                "sources": ["writer2024"],
+                "note": "n | m",
+            }
+        ],
+        "lineage": [],
+        "gaps": [],
+    }
+    text = corpus_map.render_map(m, 1)
+    assert "| A / B | thin | writer2024 | n / m |" in text
+    assert "## Gaps\n- (none noted)" in text
+
+
+def test_interlocutors_section_is_available_for_large_libraries():
+    card = (
+        "## Main claims and evidence\n- A claim\n\n"
+        "## Interlocutors\n- Wright: responds to Hahnel\n\n"
+        "## Limits\n- none\n"
+    )
+    assert corpus_map._interlocutors_section(card) == (
+        "## Interlocutors\n- Wright: responds to Hahnel"
+    )
+
+
 def test_project_note_staleness_tracks_draft_citations(project, scripted):
     project.project_md.write_text("# T\n\n## Open questions\n- Is it flexible?\n")
     card = cards.card_path(project, "writer2024")

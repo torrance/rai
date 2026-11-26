@@ -87,7 +87,7 @@ MAP_SCHEMA: dict[str, Any] = {
                 "required": ["source", "responds_to", "how"],
             },
         },
-        "gaps": {"type": "array", "items": {"type": "string"}},
+        "gaps": {"type": "array", "items": {"type": "string"}, "minItems": 1},
     },
     "required": ["overview", "themes", "debates", "coverage", "gaps"],
 }
@@ -255,7 +255,17 @@ def build_map(
             f"Themes (already written):\n{json.dumps(themes, ensure_ascii=False)}\n\n"
             "Claims by source:\n"
             + "\n\n".join(
-                c["cite_key"] + ":\n" + _claims_section(c["card"]) for c in cards
+                c["cite_key"]
+                + ":\n"
+                + "\n".join(
+                    section
+                    for section in (
+                        _claims_section(c["card"]),
+                        _interlocutors_section(c["card"]),
+                    )
+                    if section
+                )
+                for c in cards
             ),
             SYNTHESIS_SCHEMA,
             stage="summarising",
@@ -302,6 +312,14 @@ def _claims_section(card: str) -> str:
     return card[start : end if end > 0 else None].strip()
 
 
+def _interlocutors_section(card: str) -> str:
+    start = card.find("## Interlocutors")
+    if start < 0:
+        return ""
+    end = card.find("\n## ", start + 5)
+    return card[start : end if end > 0 else None].strip()
+
+
 def render_map(m: dict[str, Any], n_cards: int) -> str:
     parts = [
         f"# Corpus map\n\n{n_cards} sources.\n\n## Overview\n{m.get('overview', '')}"
@@ -319,8 +337,12 @@ def render_map(m: dict[str, Any], n_cards: int) -> str:
         )
         debates.append(f"### {d['question']}\n{positions}")
     parts.append("## Debates\n" + ("\n\n".join(debates) or "(none found)"))
+    def cell(text: Any) -> str:
+        return str(text).replace("|", "/")
+
     rows = "\n".join(
-        f"| {c['question']} | {c['rating']} | {', '.join(c['sources'])} | {c['note']} |"
+        f"| {cell(c['question'])} | {cell(c['rating'])} | "
+        f"{cell(', '.join(c['sources']))} | {cell(c['note'])} |"
         for c in m.get("coverage", [])
     )
     parts.append(
@@ -332,5 +354,6 @@ def render_map(m: dict[str, Any], n_cards: int) -> str:
         for x in m.get("lineage", [])
     )
     parts.append("## Lineage\n" + (lineage or "(none recorded)"))
-    parts.append("## Gaps\n" + ("\n".join(f"- {g}" for g in m.get("gaps", [])) or "-"))
+    gaps = "\n".join(f"- {g}" for g in m.get("gaps", []))
+    parts.append("## Gaps\n" + (gaps or "- (none noted)"))
     return "\n\n".join(parts) + "\n"
