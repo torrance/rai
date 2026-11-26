@@ -24,6 +24,13 @@ def test_jsonc_handles_urls_comments_and_trailing_commas():
     assert data == {"a": "https://x.org//y", "b": [1, 2]}
 
 
+def test_project_template_uses_stage_model_keys_only():
+    text = (TEMPLATE_DIR / "nfh.toml").read_text()
+    assert "[models] chat" not in text
+    assert "Scout" not in text
+    assert 'summarising = "opencode-go/<model-id>"' in text
+
+
 def test_rendered_config_parses_and_names_servers(project):
     config = jsonc.load(project.root / "opencode.jsonc")
     assert set(config["mcp"]["servers"]) == {"nfh", "zotero", "papers"}
