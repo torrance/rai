@@ -21,6 +21,11 @@ def test_status_warns_when_generated_files_are_out_of_sync(project):
     assert "out of sync" in result.output and "nfh sync" in result.output
 
 
+def test_show_help_lists_sources():
+    result = runner.invoke(app, ["show", "--help"])
+    assert result.exit_code == 0 and "sources" in result.output
+
+
 def test_ingest_without_zotero_explains(project):
     project_toml = project.root / "nfh.toml"
     project_toml.write_text(

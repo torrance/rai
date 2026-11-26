@@ -590,7 +590,7 @@ def show(
         str,
         typer.Argument(
             help="brief, corpus_map, manuscript_map, chapter_note, claims, "
-            "objections, decisions, reading, candidates or sessions"
+            "objections, decisions, reading, sources, candidates or sessions"
         ),
     ],
     file: Annotated[str, typer.Option(help="A draft file (for chapter_note)")] = "",
