@@ -170,8 +170,11 @@ def widen(
     return max(0, first - radius * 3), last + radius * 3
 
 
-def format_blocks(blocks: list[sqlite3.Row], max_tokens: int) -> tuple[str, bool]:
+def format_blocks(
+    blocks: list[sqlite3.Row], max_tokens: int
+) -> tuple[str, list[sqlite3.Row], bool]:
     out: list[str] = []
+    shown: list[sqlite3.Row] = []
     used = 0
     truncated = False
     last_marker = None
@@ -186,7 +189,8 @@ def format_blocks(blocks: list[sqlite3.Row], max_tokens: int) -> tuple[str, bool
             truncated = True
             break
         out.append(line)
-    return "\n\n".join(out), truncated
+        shown.append(b)
+    return "\n\n".join(out), shown, truncated
 
 
 def read_location(
@@ -208,13 +212,12 @@ def read_location(
         }
     first, last = widen(store, source["id"], *span, radius=radius)
     blocks = store.blocks(source["id"], first, last)
-    text, truncated = format_blocks(blocks, max_tokens)
-    shown = blocks[: len(text.split("\n\n"))]
+    text, shown, truncated = format_blocks(blocks, max_tokens)
     return {
         "citation": citation(source, loc_label(shown)),
         "source_id": source["id"],
         "title": source["title"],
-        "range": f"seq:{blocks[0]['seq']}-{shown[-1]['seq']}" if blocks else "",
+        "range": f"seq:{blocks[0]['seq']}-{shown[-1]['seq']}" if shown else "",
         "truncated": truncated,
         "text": text,
     }

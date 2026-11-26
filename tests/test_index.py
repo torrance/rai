@@ -97,6 +97,28 @@ def test_search_read_and_verify(project, fake_ollama):
     store.close()
 
 
+def test_read_location_reports_only_the_blocks_it_shows(project):
+    store = Store(project)
+    cur = store.conn.execute(
+        "INSERT INTO sources(key, title, cite_key) VALUES('local:table', 'Table', 't')"
+    )
+    source_id = cur.lastrowid
+    blocks = [
+        (source_id, 0, "paragraph", "A short block."),
+        (source_id, 1, "table", "Row one.\n\nRow two."),
+        (source_id, 2, "paragraph", "x " * 2000),
+    ]
+    store.conn.executemany(
+        "INSERT INTO blocks(source_id, seq, kind, text) VALUES(?,?,?,?)", blocks
+    )
+    store.conn.commit()
+    read = read_location(store, source_id, "seq:0-2", radius=0, max_tokens=20)
+    assert read["truncated"] is True
+    assert read["range"] == "seq:0-1"
+    assert "Row two." in read["text"] and "x x x" not in read["text"]
+    store.close()
+
+
 def test_removed_local_file_leaves_index(project, fake_ollama):
     _ingest(project)
     (project.sources_local_dir / "riders.md").unlink()
