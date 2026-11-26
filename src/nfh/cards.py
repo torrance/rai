@@ -23,7 +23,7 @@ from .chunk import embedding_text, make_units, marked_text
 from .config import PROMPT_VERSION, Project, model_identity, same_model
 from .embed import embed_texts
 from .llm import chat_json, load_prompt
-from .search import resolve_location
+from .search import resolve_location, resolve_location_parts
 from .store import Store, authors_list, now
 from .verify import verify_quote
 
@@ -231,6 +231,14 @@ def project_note_path(project: Project, cite_key: str) -> Path:
 def _location_ok(
     store: Store, source_id: int, loc: str, unit: dict | None = None
 ) -> bool:
+    parts = resolve_location_parts(store, source_id, loc)
+    if parts is not None:
+        if unit is None:
+            return True
+        return any(
+            not (last < unit["first_block"] or first > unit["last_block"])
+            for first, last in parts
+        )
     span = resolve_location(store, source_id, loc)
     if span is None:
         return False

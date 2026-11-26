@@ -6,7 +6,12 @@ import pytest
 from nfh import ledger
 from nfh.ingest import ingest_local, reembed
 from nfh.notes import read_notes
-from nfh.search import read_location, resolve_location, search
+from nfh.search import (
+    read_location,
+    resolve_location,
+    resolve_location_parts,
+    search,
+)
 from nfh.status import embedding_problem
 from nfh.store import Store
 from nfh.verify import verify_quote
@@ -335,9 +340,38 @@ def test_page_locations_handle_roman_cover_and_missing_end_pages(project):
     assert resolve_location(store, source_id, "pp. IV-VIII") == (2, 4)
     assert resolve_location(store, source_id, "IV-VIII") == (2, 4)
     assert resolve_location(store, source_id, "pp. 79-81") == (7, 8)
-    assert resolve_location(store, source_id, "pp. 79, 82") == (7, 9)
+    assert resolve_location(store, source_id, "pp. 79, 82") == (7, 7)
+    assert resolve_location_parts(store, source_id, "pp. 79, 82") == [(7, 7), (9, 9)]
     read = read_location(store, source_id, "pp. C1-2", radius=0)
     assert read["range"] == "seq:0-6" and read["text"].startswith("[p. C1]")
+    store.close()
+
+
+def test_discontinuous_page_locations_do_not_bridge(project):
+    from nfh.cards import _location_ok
+
+    store = Store(project)
+    cur = store.conn.execute(
+        "INSERT INTO sources(key, title, cite_key) VALUES('local:gap', 'G', 'g')"
+    )
+    source_id = cur.lastrowid
+    store.conn.executemany(
+        "INSERT INTO blocks(source_id, seq, kind, text, page_index, page_label) "
+        "VALUES(?,?,?,?,?,?)",
+        [
+            (source_id, 0, "paragraph", "page five", 1, "5"),
+            (source_id, 1, "paragraph", "page one ten", 2, "110"),
+            (source_id, 2, "paragraph", "page three ten", 3, "310"),
+        ],
+    )
+    store.conn.commit()
+    assert resolve_location(store, source_id, "pp. 5, 310") == (0, 0)
+    assert not _location_ok(
+        store, source_id, "pp. 5, 310", {"first_block": 1, "last_block": 1}
+    )
+    assert _location_ok(
+        store, source_id, "pp. 5, 310", {"first_block": 0, "last_block": 0}
+    )
     store.close()
 
 

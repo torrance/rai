@@ -228,39 +228,79 @@ def _page_index_bounds(
     return index, index
 
 
+def _page_part_range(
+    store: Store, source_id: int, first_label: str, last_label: str
+) -> tuple[int, int, int, int] | None:
+    """(first page, last page, first seq, last seq) for one page interval."""
+    conn = store.conn
+    first = _page_index_bounds(store, source_id, first_label, start=True)
+    if first is None:
+        return None
+    last = (
+        first
+        if last_label == first_label
+        else _page_index_bounds(store, source_id, last_label, start=False)
+    )
+    if last is None or last[1] < first[0]:
+        last = first
+    a = conn.execute(
+        "SELECT min(seq) s FROM blocks WHERE source_id=? AND page_index=?",
+        (source_id, first[0]),
+    ).fetchone()
+    b = conn.execute(
+        "SELECT max(seq) s FROM blocks WHERE source_id=? "
+        "AND page_index BETWEEN ? AND ?",
+        (source_id, first[0], last[1]),
+    ).fetchone()
+    if a and a["s"] is not None and b and b["s"] is not None:
+        return first[0], last[1], a["s"], b["s"]
+    return None
+
+
+def resolve_location_parts(
+    store: Store, source_id: int, loc: str
+) -> list[tuple[int, int]] | None:
+    """Page intervals in a location, or None when it is not a page location."""
+    parts = _page_parts(loc)
+    if parts is None:
+        return None
+    spans = [
+        (span[2], span[3])
+        for first_label, last_label in parts
+        if (
+            span := _page_part_range(store, source_id, first_label, last_label)
+        )
+        is not None
+    ]
+    return spans or None
+
+
 def _page_span(store: Store, source_id: int, loc: str) -> tuple[int, int] | None:
     parts = _page_parts(loc)
     if parts is None:
         return None
-    conn = store.conn
-    starts: list[int] = []
-    ends: list[int] = []
-    for first_label, last_label in parts:
-        first = _page_index_bounds(store, source_id, first_label, start=True)
-        if first is None:
-            continue
-        last = (
-            first
-            if last_label == first_label
-            else _page_index_bounds(store, source_id, last_label, start=False)
+    ranges = [
+        span
+        for first_label, last_label in parts
+        if (
+            span := _page_part_range(store, source_id, first_label, last_label)
         )
-        if last is None or last[1] < first[0]:
-            last = first
-        a = conn.execute(
-            "SELECT min(seq) s FROM blocks WHERE source_id=? AND page_index=?",
-            (source_id, first[0]),
-        ).fetchone()
-        b = conn.execute(
-            "SELECT max(seq) s FROM blocks WHERE source_id=? "
-            "AND page_index BETWEEN ? AND ?",
-            (source_id, first[0], last[1]),
-        ).fetchone()
-        if a and a["s"] is not None and b and b["s"] is not None:
-            starts.append(a["s"])
-            ends.append(b["s"])
-    if not starts:
+        is not None
+    ]
+    if not ranges:
         return None
-    return min(starts), max(ends)
+    ranges.sort()
+    if len(ranges) == 1:
+        return ranges[0][2], ranges[0][3]
+    # Do not bridge a discontinuous citation from page 5 to page 310.
+    if all(
+        next_start - last_end <= 1
+        for (_, last_end, _, _), (next_start, _, _, _) in zip(
+            ranges, ranges[1:], strict=False
+        )
+    ):
+        return ranges[0][2], ranges[-1][3]
+    return ranges[0][2], ranges[0][3]
 
 
 def resolve_location(store: Store, source_id: int, loc: str) -> tuple[int, int] | None:
