@@ -45,8 +45,8 @@ the writer has decided. How the tools fit together:
 - /wrap asks you to summarise the conversation: record it with record_session
   (what was discussed, new understandings, where you left off).
 - refresh_card / refresh_chapter rebuild a stale note; they take minutes.
-- read_candidate, read_candidate_section and save_candidate are for texts that are
-  not in the library yet.
+- read_candidate, read_candidate_section, save_candidate and save_candidates are
+  for texts that are not in the library yet.
 """
 
 log = logging.getLogger("nfh.server")
@@ -307,6 +307,16 @@ def make_server(project: Project) -> FastMCP:
             "verdict": verdict,
         }
         return cand.save_candidate(project, entry)
+
+    @mcp.tool()
+    def save_candidates(candidates: list[dict]) -> dict:
+        """Propose several assessed candidates in one call.
+
+        Each entry needs the same ten fields as save_candidate. Returns one
+        result per entry in input order, plus saved, duplicate and error counts.
+        Record one work per entry; never bundle several works into one id.
+        """
+        return cand.save_candidates(project, candidates)
 
     return mcp
 

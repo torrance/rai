@@ -26,6 +26,7 @@ def test_server_exposes_the_tools(project):
         "read_candidate",
         "read_candidate_section",
         "save_candidate",
+        "save_candidates",
     }
 
 
@@ -108,6 +109,59 @@ def test_save_candidate_builds_the_reading_list(project):
     text = project.reading_list.read_text()
     assert text.count("A paper") == 1 and "Verdict: skip: old" in text
     assert "Don't edit this file" in text
+
+
+def test_save_candidates_batch_reports_each_entry(project):
+    from nfh.candidates import save_candidates
+
+    def candidate(ref: str, title: str) -> dict[str, str]:
+        return {
+            "title": title,
+            "url_or_doi": ref,
+            "serves": "Q1",
+            "claim": "c",
+            "evidence": "e",
+            "standing": "s",
+            "fit": "f",
+            "read_depth": "full",
+            "access": "open",
+            "verdict": "read in full",
+        }
+
+    result = save_candidates(
+        project,
+        [
+            candidate("10.1/a", "A"),
+            candidate("10.1/b", "B"),
+            {"title": "Missing fields"},
+        ],
+    )
+    assert (result["saved"], result["duplicates"], result["errors"]) == (2, 0, 1)
+    assert [r.get("id") for r in result["results"][:2]] == ["C1", "C2"]
+    assert "Missing required fields" in result["results"][2]["error"]
+
+    again = save_candidates(project, [candidate("10.1/a", "A")])
+    assert again["duplicates"] == 1 and again["results"][0]["duplicate"]
+    text = project.reading_list.read_text()
+    assert text.count("### C1: A") == 1 and "### C2: B" in text
+
+
+def test_save_candidates_tool_accepts_a_batch(project):
+    server = make_server(project)
+    entry = {
+        "title": "Batch paper",
+        "url_or_doi": "10.1/batch",
+        "serves": "Q1",
+        "claim": "c",
+        "evidence": "e",
+        "standing": "s",
+        "fit": "f",
+        "read_depth": "full",
+        "access": "open",
+        "verdict": "read in full",
+    }
+    result = call(server, "save_candidates", candidates=[entry])
+    assert "C1" in str(result) and "Batch paper" in project.reading_list.read_text()
 
 
 def test_record_session_round_trips_and_refreshes_the_briefing(project):

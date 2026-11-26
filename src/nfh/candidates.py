@@ -363,3 +363,57 @@ def save_candidate(project: Project, entry: dict[str, Any]) -> dict[str, Any]:
     render_reading_list(project)
     result["list"] = project.rel(project.reading_list)
     return result
+
+
+CANDIDATE_REQUIRED = ("url_or_doi", *ledger.CANDIDATE_FIELDS)
+
+
+def save_candidates(
+    project: Project, entries: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Record several assessed works in one call, reporting each result."""
+    if not entries:
+        return {"ok": False, "error": "No candidates supplied."}
+    results: list[dict[str, Any]] = []
+    saved = duplicates = errors = 0
+    for entry in entries:
+        if not isinstance(entry, dict):
+            results.append({"ok": False, "error": "Each candidate must be an object."})
+            errors += 1
+            continue
+        missing = [
+            field
+            for field in CANDIDATE_REQUIRED
+            if not str(entry.get(field, "")).strip()
+        ]
+        if missing:
+            results.append(
+                {
+                    "ok": False,
+                    "error": "Missing required fields: " + ", ".join(missing) + ".",
+                    "title": str(entry.get("title", "")).strip(),
+                }
+            )
+            errors += 1
+            continue
+        result = ledger.propose_candidate(project, entry)
+        if result.get("ok"):
+            saved += 1
+        elif result.get("duplicate"):
+            duplicates += 1
+        else:
+            errors += 1
+        results.append(result)
+    if results:
+        render_reading_list(project)
+    path = project.rel(project.reading_list)
+    for result in results:
+        result["list"] = path
+    return {
+        "ok": True,
+        "saved": saved,
+        "duplicates": duplicates,
+        "errors": errors,
+        "results": results,
+        "list": path,
+    }

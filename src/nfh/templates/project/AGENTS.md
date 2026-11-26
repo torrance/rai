@@ -49,4 +49,5 @@ files. The conversation is the only channel, so:
 - read_location(cite_key, "toc"): the source's full heading outline, with
   locations to pass back to read_location.
 - reports/ is what you write for the writer to read: plans/, research/,
-  feedback/, and reading-list.md (written by the save_candidate tool).
+  feedback/, and reading-list.md (written by the save_candidate and
+  save_candidates tools).

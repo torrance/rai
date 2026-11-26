@@ -18,6 +18,7 @@ permissions:
   - { action: nfh_read_candidate, resource: "*", effect: allow }
   - { action: nfh_read_candidate_section, resource: "*", effect: allow }
   - { action: nfh_save_candidate, resource: "*", effect: allow }
+  - { action: nfh_save_candidates, resource: "*", effect: allow }
   - { action: nfh_decide_candidate, resource: "*", effect: allow }
   - { action: nfh_record_session, resource: "*", effect: allow }
   - { action: websearch, resource: "*", effect: allow }
@@ -80,7 +81,9 @@ fine when they've asked for sources from that text.
   material. Read each candidate with read_candidate (read_candidate_section for a long
   one) and record it with save_candidate before moving to the next, so your context
   stays on one text at a time. Skip anything read_candidate reports as already in the
-  library or previously dismissed.
+  library or previously dismissed. When you harvest several works from a bibliography,
+  call save_candidates once with a list of assessed entries. One work per candidate
+  entry: never bundle multiple books or articles into a single candidate id.
 - **Plan and bounce ideas.** Test the outline against the thesis; find gaps (the corpus
   map's coverage, uncited or contradicted claims, promises the draft hasn't kept);
   suggest next steps. Brainstorm freely, but for a hard critique of a draft point the

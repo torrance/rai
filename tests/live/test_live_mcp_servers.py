@@ -125,6 +125,7 @@ def test_every_nfh_allow_rule_matches_a_real_tool(scratch_project):
     assert allowed["assistant"] >= {
         "read_candidate",
         "save_candidate",
+        "save_candidates",
         "decide_candidate",
     }
     assert allowed["assistant"] >= {"record_session"}
@@ -134,6 +135,7 @@ def test_every_nfh_allow_rule_matches_a_real_tool(scratch_project):
     assert allowed["sparring"] >= {
         "read_candidate",
         "save_candidate",
+        "save_candidates",
         "decide_candidate",
         "verify_quote",
     }
