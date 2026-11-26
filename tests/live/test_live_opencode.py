@@ -192,6 +192,9 @@ def test_agents_load_and_the_drafts_guard_holds_in_opencodes_own_rules(
         ("reader", "nfh_record_decision", "*"): "deny",
         ("reader", "nfh_record_session", "*"): "deny",
         ("reader", "nfh_read_notes", "*"): "allow",
+        ("reader", "nfh_verify_quote", "*"): "allow",
+        ("reader", "nfh_read_candidate", "*"): "allow",
+        ("reader", "nfh_read_candidate_section", "*"): "allow",
         ("reader", "websearch", "anything"): "deny",
     }
     wrong = {

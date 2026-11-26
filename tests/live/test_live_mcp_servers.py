@@ -139,6 +139,11 @@ def test_every_nfh_allow_rule_matches_a_real_tool(scratch_project):
     }
     assert "update_claim" not in allowed["sparring"]
     assert "raise_objections" not in allowed["assistant"]
+    assert allowed["reader"] >= {
+        "verify_quote",
+        "read_candidate",
+        "read_candidate_section",
+    }
     assert not allowed["reader"] & {"record_decision", "resolve_objection"}
     assert set().union(*allowed.values()) == tools, "a tool no agent can use"
 
