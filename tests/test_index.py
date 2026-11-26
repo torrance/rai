@@ -11,7 +11,7 @@ from nfh.status import embedding_problem
 from nfh.store import Store
 from nfh.verify import verify_quote
 
-from .conftest import SAMPLE
+from .conftest import SAMPLE, fake_vectors
 
 
 def _ingest(project):
@@ -211,6 +211,57 @@ def test_status_reports_an_embedding_mismatch(project, fake_ollama):
     _ingest(project)
     project.models.embedding_dims = 8
     assert "--reembed" in embedding_problem(project)
+
+
+def test_source_filter_uses_exact_vector_search(project, fake_ollama, monkeypatch):
+    monkeypatch.setattr("nfh.search.CANDIDATES", 1)
+    store = Store(project)
+    if not store.has_vec:
+        pytest.skip("sqlite-vec is not available")
+    target_id = store.conn.execute(
+        "INSERT INTO sources(key, title, cite_key) "
+        "VALUES('local:target', 'Target', 'target')"
+    ).lastrowid
+    filler_id = store.conn.execute(
+        "INSERT INTO sources(key, title, cite_key) "
+        "VALUES('local:filler', 'Filler', 'filler')"
+    ).lastrowid
+    qvec = fake_vectors(["targetword"])[0]
+    target_vec = fake_vectors(["unrelated text"])[0]
+    store._insert_chunks(
+        target_id,
+        [
+            {
+                "first_block": 0,
+                "last_block": 0,
+                "heading_path": "",
+                "text": "unrelated text",
+                "loc_label": "para 1",
+            }
+        ],
+        np.array([target_vec], dtype=np.float32),
+        kind="text",
+    )
+    filler = [
+        {
+            "first_block": n,
+            "last_block": n,
+            "heading_path": "",
+            "text": "targetword",
+            "loc_label": f"para {n + 1}",
+        }
+        for n in range(5)
+    ]
+    store._insert_chunks(
+        filler_id,
+        filler,
+        np.array([qvec] * len(filler), dtype=np.float32),
+        kind="text",
+    )
+    store.conn.commit()
+    hits = search(store, "targetword", sources=["target"], limit=1)
+    assert hits and hits[0]["cite_key"] == "target"
+    store.close()
 
 
 def test_store_sets_a_busy_timeout(project):

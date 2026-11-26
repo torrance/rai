@@ -26,19 +26,21 @@ def _vector_hits(
     qvec: np.ndarray,
     kind: str,
     source_ids: list[int] | None = None,
-    pool: int = CANDIDATES,
+    pool: int | None = CANDIDATES,
+    exact: bool = False,
 ) -> list[int]:
     blob = np.asarray(qvec, dtype=np.float32).tobytes()
     clause, source_args = _source_clause(source_ids)
-    if store.has_vec:
+    if store.has_vec and not exact:
+        k = (pool or CANDIDATES) * 4
         rows = store.conn.execute(
             "SELECT v.rowid AS id FROM chunks_vec v JOIN chunks c ON c.id = v.rowid "
             "WHERE v.embedding MATCH ? AND k = ? AND c.kind = ?"
             + clause
             + " ORDER BY v.distance",
-            (blob, pool * 4, kind, *source_args),
+            (blob, k, kind, *source_args),
         ).fetchall()
-        return [r["id"] for r in rows][:pool]
+        return [r["id"] for r in rows][:pool] if pool else [r["id"] for r in rows]
     rows = store.conn.execute(
         "SELECT c.id, c.embedding FROM chunks c WHERE c.kind = ?" + clause,
         (kind, *source_args),
@@ -46,7 +48,9 @@ def _vector_hits(
     if not rows:
         return []
     matrix = np.stack([np.frombuffer(r["embedding"], dtype=np.float32) for r in rows])
-    order = np.argsort(-(matrix @ qvec))[:pool]
+    order = np.argsort(-(matrix @ qvec))
+    if pool:
+        order = order[:pool]
     return [rows[i]["id"] for i in order]
 
 
@@ -114,10 +118,12 @@ def search(
     source_ids = _resolve_sources(store, sources)
     per_source_limit = max(0, per_source_limit)
     pool = max(CANDIDATES, limit * 10) if per_source_limit else CANDIDATES
+    exact = bool(source_ids) or kind == "card" or per_source_limit > 0
+    vector_pool = None if per_source_limit else pool
     scores: dict[int, float] = {}
     qvec = embed_query(store.project, query)
     for hits in (
-        _vector_hits(store, qvec, kind, source_ids, pool),
+        _vector_hits(store, qvec, kind, source_ids, vector_pool, exact),
         _keyword_hits(store, query, kind, source_ids, pool),
     ):
         for rank, cid in enumerate(hits):
