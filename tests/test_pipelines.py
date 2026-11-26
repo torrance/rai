@@ -205,6 +205,8 @@ def test_card_drops_bad_locations_and_quotes(project, scripted):
     STAGES.clear()
     cards.build_card(project, store, source, say=lambda _: None)
     assert "reading" not in STAGES
+    meta, _ = cards.read_frontmatter(cards.card_path(project, "writer2024"))
+    assert int(meta["checks"].split()[0]) > 0
 
     # The corpus map is also built from the open questions, not just cards.
     project.project_md.write_text(

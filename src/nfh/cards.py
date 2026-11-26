@@ -248,6 +248,13 @@ def _location_ok(
     return not (last < unit["first_block"] or first > unit["last_block"])
 
 
+def _entry_count(output: dict[str, Any]) -> int:
+    return sum(
+        len(output.get(field, []))
+        for field in ("claims", "concepts", "passages", "interlocutors")
+    )
+
+
 def _check_entries(
     store: Store, source_id: int, output: dict[str, Any], unit: dict | None = None
 ) -> tuple[int, int]:
@@ -461,7 +468,9 @@ def build_card(
             and cached["first_block"] == unit["first_block"]
             and cached["last_block"] == unit["last_block"]
         ):
-            outputs.append(json.loads(cached["output_json"]))
+            cached_output = json.loads(cached["output_json"])
+            outputs.append(cached_output)
+            checked += _entry_count(cached_output)
             continue
         say(
             f"  reading unit {n + 1}/{len(units)}: "
