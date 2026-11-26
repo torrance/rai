@@ -320,6 +320,11 @@ def test_quote_patterns_handle_internal_quotes_and_multi_citations():
     note_match = NOTE_QUOTE.search(note)
     assert note_match
     assert note_match.group(2) == "one" and note_match.group(3) == "p. 4"
+    punctuated = '"a quoted passage that is long enough". [@one, p. 4]'
+    punctuated_match = NOTE_QUOTE.search(punctuated)
+    assert punctuated_match
+    assert punctuated_match.group(2) == "one"
+    assert punctuated_match.group(3) == "p. 4"
 
 
 def test_project_note_staleness_tracks_draft_citations(project, scripted):
