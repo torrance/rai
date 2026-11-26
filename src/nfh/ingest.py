@@ -74,6 +74,7 @@ def _index_file(
 ) -> None:
     digest = sha256(path)
     existing = store.source_by_key(meta["key"])
+    old_key = existing["cite_key"] if existing else ""
     label = meta.get("cite_key") or meta["key"]
     if existing and existing["file_sha256"] == digest:
         _refresh_metadata(project, store, existing, meta, report)
@@ -102,6 +103,11 @@ def _index_file(
     say(f"  embedding {len(chunks)} chunks")
     vectors = embed_texts(project, [embedding_text(meta, c) for c in chunks])
     store.write_source(meta, result.blocks, chunks, vectors)
+    if old_key and old_key != meta["cite_key"]:
+        from .cards import rename_source_notes
+
+        rename_source_notes(project, store, old_key, meta["cite_key"])
+        report.renamed.append((old_key, meta["cite_key"]))
     (report.updated if existing else report.added).append(meta["cite_key"])
     if result.status != "ok":
         report.flagged.append((meta["cite_key"], result.status, result.detail))

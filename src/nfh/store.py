@@ -225,7 +225,8 @@ class Store:
             ).fetchone()
         return None
 
-    def delete_source(self, source_id: int) -> None:
+    def delete_source(self, source_id: int, *, remove_notes: bool = True) -> None:
+        source = self.source(source_id)
         chunk_ids = [
             r["id"]
             for r in self.conn.execute(
@@ -233,6 +234,19 @@ class Store:
             )
         ]
         self._delete_chunk_index(chunk_ids)
+        if remove_notes and source is not None and source["cite_key"]:
+            from .cards import card_path, project_note_path
+
+            card = card_path(self.project, source["cite_key"])
+            for path in (
+                card,
+                card.with_suffix(".prev.md"),
+                project_note_path(self.project, source["cite_key"]),
+            ):
+                path.unlink(missing_ok=True)
+                self.conn.execute(
+                    "DELETE FROM notes WHERE path=?", (self.project.rel(path),)
+                )
         self.conn.execute("DELETE FROM sources WHERE id=?", (source_id,))
 
     def _delete_chunk_index(self, chunk_ids: Sequence[int]) -> None:
@@ -252,7 +266,9 @@ class Store:
         with self.conn:
             existing = self.source_by_key(meta["key"])
             if existing:
-                self.delete_source(existing["id"])
+                # Replacing the text is not a deletion: keep the cards and
+                # notes on disk until the source is rebuilt or actually removed.
+                self.delete_source(existing["id"], remove_notes=False)
             cur = self.conn.execute(
                 "INSERT INTO sources(key, title, authors, year, kind, cite_key, doi, "
                 "url, file_path, file_sha256, tags, collections, status, "

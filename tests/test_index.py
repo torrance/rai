@@ -126,6 +126,54 @@ def test_removed_local_file_leaves_index(project, fake_ollama):
     assert report.removed == ["writer2024"]
 
 
+def test_removed_source_cleans_up_cards_notes_and_index(project, fake_ollama):
+    from nfh.cards import card_path, project_note_path, write_with_frontmatter
+
+    _ingest(project)
+    card = card_path(project, "writer2024")
+    previous = card.with_suffix(".prev.md")
+    note = project_note_path(project, "writer2024")
+    for path in (card, previous, note):
+        write_with_frontmatter(path, {"cite_key": "writer2024"}, "x")
+    store = Store(project)
+    for path in (card, previous, note):
+        store.record_note(project.rel(path), "card", {}, "m", "1")
+    store.close()
+
+    (project.sources_local_dir / "riders.md").unlink()
+    report = ingest_local(project, say=lambda _: None)
+    assert report.removed == ["writer2024"]
+    assert not any(path.exists() for path in (card, previous, note))
+    store = Store(project)
+    assert all(store.note(project.rel(path)) is None for path in (card, previous, note))
+    store.close()
+
+
+def test_content_change_with_a_new_key_moves_the_card(project, fake_ollama):
+    from nfh.cards import card_path, project_note_path, write_with_frontmatter
+
+    _ingest(project)
+    old_card = card_path(project, "writer2024")
+    old_note = project_note_path(project, "writer2024")
+    write_with_frontmatter(old_card, {"cite_key": "writer2024"}, "card")
+    write_with_frontmatter(old_note, {"cite_key": "writer2024"}, "note")
+
+    (project.sources_local_dir / "riders.md").write_text(
+        SAMPLE + "\n\nA new paragraph.\n"
+    )
+    (project.sources_local_dir / "riders.md.yaml").write_text(
+        "title: Riders\nauthors: [A. Writer]\nyear: 2024\ncite_key: writer2024new\n"
+    )
+    report = ingest_local(project, say=lambda _: None)
+    assert report.renamed == [("writer2024", "writer2024new")]
+    assert report.updated == ["writer2024new"]
+    assert not old_card.exists() and not old_note.exists()
+    assert "cite_key: writer2024new" in card_path(project, "writer2024new").read_text()
+    assert "cite_key: writer2024new" in project_note_path(
+        project, "writer2024new"
+    ).read_text()
+
+
 def test_key_change_in_zotero_moves_card_and_note(project, fake_ollama):
     from nfh.cards import card_path, project_note_path, write_with_frontmatter
     from nfh.status import compute
