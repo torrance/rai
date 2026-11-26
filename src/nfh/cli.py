@@ -547,9 +547,11 @@ def inspect(
 @app.command()
 def status() -> None:
     """Flagged sources, stale notes and the state of the claims ledger."""
-    from .status import compute
+    from .render import sync_project
+    from .status import compute, embedding_problem
 
-    s = compute(_project())
+    project = _project()
+    s = compute(project)
     say(f"{s.sources} sources indexed")
     for key, st, detail in s.flagged:
         typer.secho(f"  flagged {key} [{st}]: {detail}", fg="yellow")
@@ -569,6 +571,17 @@ def status() -> None:
             "in Zotero)",
             fg="yellow",
         )
+    drift = sync_project(project, check=True).drift
+    if drift:
+        typer.secho(
+            "Generated files out of sync with the settings: "
+            + ", ".join(drift)
+            + "; run `nfh sync`",
+            fg="yellow",
+        )
+    problem = embedding_problem(project)
+    if problem:
+        typer.secho(problem, fg="yellow")
 
 
 @app.command()

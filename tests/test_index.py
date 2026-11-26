@@ -7,6 +7,7 @@ from nfh import ledger
 from nfh.ingest import ingest_local, reembed
 from nfh.notes import read_notes
 from nfh.search import read_location, resolve_location, search
+from nfh.status import embedding_problem
 from nfh.store import Store
 from nfh.verify import verify_quote
 
@@ -204,6 +205,12 @@ def test_read_notes_sources_inventory(project, fake_ollama):
     assert "| Cite key | Author (year) | Title | Kind |" in text
     assert "| writer2024 | A. Writer (2024) | Riders | note |" in text
     assert "| read | 2 |" in text
+
+
+def test_status_reports_an_embedding_mismatch(project, fake_ollama):
+    _ingest(project)
+    project.models.embedding_dims = 8
+    assert "--reembed" in embedding_problem(project)
 
 
 def test_store_sets_a_busy_timeout(project):

@@ -40,6 +40,22 @@ class Status:
         return out
 
 
+def embedding_problem(project: Project) -> str:
+    """A mismatch between the configured embedding setup and the index, if any."""
+    store = Store(project)
+    try:
+        store.check_embedding_model(
+            project.models.embedding,
+            project.models.embedding_dims,
+            project.models.document_template,
+        )
+    except RuntimeError as exc:
+        return str(exc)
+    finally:
+        store.close()
+    return ""
+
+
 def compute(project: Project) -> Status:
     store = Store(project)
     s = Status()

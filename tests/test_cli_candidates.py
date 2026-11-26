@@ -14,6 +14,13 @@ def test_status_and_brief_on_empty_project(project):
     assert project.brief_path.read_text().startswith("# Briefing")
 
 
+def test_status_warns_when_generated_files_are_out_of_sync(project):
+    (project.root / "opencode.jsonc").unlink()
+    result = runner.invoke(app, ["--project", str(project.root), "status"])
+    assert result.exit_code == 0, result.output
+    assert "out of sync" in result.output and "nfh sync" in result.output
+
+
 def test_ingest_without_zotero_explains(project):
     project_toml = project.root / "nfh.toml"
     project_toml.write_text(
