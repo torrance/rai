@@ -91,6 +91,15 @@ def test_reading_status_latest_wins_and_is_validated(project):
     )
 
 
+def test_reading_status_follows_a_renamed_citation_key(project):
+    ledger.set_reading_status(project, "old", "read", "chapter 2")
+    ledger.rename_reading_status(project, "old", "new")
+    statuses = ledger.reading_statuses(project)
+    assert "old" not in statuses
+    assert statuses["new"]["status"] == "read"
+    assert statuses["new"]["note"] == "chapter 2"
+
+
 def test_candidates_dedupe_and_remember_dismissals(project):
     entry = {"title": "T", "url_or_doi": "https://doi.org/10.1/ABC", "verdict": "v"}
     assert ledger.propose_candidate(project, entry)["id"] == "C1"

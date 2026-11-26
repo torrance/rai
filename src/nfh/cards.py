@@ -762,8 +762,8 @@ def rename_source_notes(project: Project, store: Store, old: str, new: str) -> N
         (project_note_path(project, old), project_note_path(project, new)),
     ]
     reading = ledger.reading_statuses(project).get(old)
-    if reading and new not in ledger.reading_statuses(project):
-        ledger.set_reading_status(project, new, reading["status"], reading["note"])
+    if reading:
+        ledger.rename_reading_status(project, old, new)
     for src, dest in pairs:
         if not src.exists():
             continue

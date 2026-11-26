@@ -259,12 +259,28 @@ def set_reading_status(
 def reading_statuses(project: Project) -> dict[str, dict[str, Any]]:
     state: dict[str, dict[str, Any]] = {}
     for e in _events(project, "reading"):
+        if e.get("event") == "rename":
+            old, new = e.get("cite_key", ""), e.get("to", "")
+            if old in state:
+                if new in state:
+                    state.pop(old)
+                else:
+                    state[new] = state.pop(old)
+            continue
         state[e["cite_key"]] = {
             "status": e["status"],
             "note": e.get("note", ""),
             "date": e["ts"][:10],
         }
     return state
+
+
+def rename_reading_status(project: Project, old: str, new: str) -> dict[str, Any]:
+    """Follow a citation-key rename without leaving the old key in reading views."""
+    if old not in reading_statuses(project):
+        return {"ok": True, "moved": False}
+    _append(project, "reading", {"event": "rename", "cite_key": old, "to": new})
+    return {"ok": True, "moved": True}
 
 
 # Proposed works ------------------------------------------------------

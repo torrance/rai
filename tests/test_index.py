@@ -488,6 +488,7 @@ def test_key_change_in_zotero_moves_card_and_note(project, fake_ollama):
     from nfh import ledger
 
     assert ledger.reading_statuses(project)["writer2024riders"]["status"] == "read"
+    assert "writer2024" not in ledger.reading_statuses(project)
     store = Store(project)
     assert store.source("writer2024riders") is not None
     store.close()
