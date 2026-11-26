@@ -1,19 +1,19 @@
-# nfh harness configuration: the defaults, ready to edit.
+# rai harness configuration: the defaults, ready to edit.
 #
 # Layers, each overriding the one before:
 #   built-in defaults < config.toml (this file) < config.local.toml
-#   < a project's nfh.toml < NFH_OLLAMA_HOST (environment, host only)
+#   < a project's rai.toml < RAI_OLLAMA_HOST (environment, host only)
 #
 # Put your own changes in config.local.toml (same format, gitignored), so
 # replacing this file with a newer one never overwrites them. A project's
-# nfh.toml may repeat any section below to change it for that project only.
+# rai.toml may repeat any section below to change it for that project only.
 #
-# `nfh config` shows the values in force and which layer each came from.
-# After changing [ollama], [models] or [opencode], run `nfh sync` so each
+# `rai config` shows the values in force and which layer each came from.
+# After changing [ollama], [models] or [opencode], run `rai sync` so each
 # project's opencode.jsonc and agent files follow.
 
 [ollama]
-# Where nfh reaches Ollama: the server itself, or your port forward. The scheme
+# Where rai reaches Ollama: the server itself, or your port forward. The scheme
 # is optional ("127.0.0.1:11435" works) and a trailing /v1 is ignored.
 host = "http://127.0.0.1:11434"
 # Where OpenCode reaches it. OpenCode needs the OpenAI-style /v1 address.
@@ -24,10 +24,10 @@ opencode_base_url = ""
 # One model per stage. There is no fallback: all five must be set.
 #
 # A reference is "provider/model", optionally with "#variant". Variants apply
-# to OpenCode agent turns; nfh's own pipeline calls use the base model. A bare
+# to OpenCode agent turns; rai's own pipeline calls use the base model. A bare
 # model name means Ollama (prefix it with "ollama/" if the local name contains
 # "/"). The providers are:
-#   ollama/<model>         local Ollama (nfh talks to [ollama] host)
+#   ollama/<model>         local Ollama (rai talks to [ollama] host)
 #   opencode-go/<model>    OpenCode Go; needs OPENCODE_API_KEY (or
 #                          OPENCODE_GO_API_KEY) in .env
 #
@@ -41,9 +41,9 @@ research = "opencode-go/gemini-4-argon"
 sparring = "opencode-go/gemini-4-argon"
 # The embedding model used for indexing and search.
 embedding = "ollama/qwen3-embedding:8b-q4_K_M"
-# What the embedding model returns. `nfh selftest` checks it.
+# What the embedding model returns. `rai selftest` checks it.
 embedding_dims = 4096
-# The context window nfh asks for on its own Ollama calls. It must equal what
+# The context window rai asks for on its own Ollama calls. It must equal what
 # Ollama allocates for OpenCode's calls (which can't ask), or Ollama reloads the
 # model whenever the two take turns. 0 = ask for nothing and use the server's
 # own default. This has no effect on OpenCode Go models.
@@ -51,13 +51,13 @@ num_ctx = 262144
 # How text is wrapped before it is embedded. These defaults suit
 # qwen3-embedding; other models want other formats (see their model cards).
 # {instruction}, {query} and {text} are filled in. Changing document_template
-# changes every stored vector: run `nfh ingest --reembed` afterwards.
+# changes every stored vector: run `rai ingest --reembed` afterwards.
 query_instruction = "Given a question about a body of texts, retrieve passages that answer it"
 query_template = "Instruct: {instruction}\nQuery: {query}"
 document_template = "{text}"
 
 [opencode]
-# The local provider nfh configures for OpenCode. Stage refs using this provider
+# The local provider rai configures for OpenCode. Stage refs using this provider
 # get a generated provider block; opencode-go refs use OpenCode's built-in
 # provider and its own credential.
 provider = "ollama"
@@ -71,19 +71,19 @@ quick_variant = "quick"
 # Sent in the quick variant's request body. "" omits it, for an Ollama that
 # rejects the field.
 quick_reasoning_effort = "low"
-# The command that starts nfh for OpenCode's MCP server and the git hook.
-# Empty means `uv run --project <this folder> nfh`, which breaks if the folder
-# moves (run `nfh sync --all` after moving it). To make projects independent of
-# the folder's location, set a command that finds nfh another way, for example
-# ["nfh"] with a wrapper script on your PATH.
-nfh_command = []
+# The command that starts rai for OpenCode's MCP server and the git hook.
+# Empty means `uv run --project <this folder> rai`, which breaks if the folder
+# moves (run `rai sync --all` after moving it). To make projects independent of
+# the folder's location, set a command that finds rai another way, for example
+# ["rai"] with a wrapper script on your PATH.
+rai_command = []
 
 [scout]
 # The scholarly databases the paper search may use (the assistant and the Sparring
 # partner both have it), enforced: the search tool is started knowing only these,
 # so no agent can reach the others even if it asks. The default leaves out arXiv, bioRxiv, medRxiv, PubMed, PMC, Europe PMC,
 # dblp, IACR and CiteSeerX, which are science and computing sources that drowned
-# out social science, humanities and economics results. Run `nfh sync` after
+# out social science, humanities and economics results. Run `rai sync` after
 # changing it. Other candidates: base, hal, openaire, semantic, zenodo.
-# Not every source answers reliably: `nfh selftest --only paper_sources` tries each.
+# Not every source answers reliably: `rai selftest --only paper_sources` tries each.
 paper_sources = ["openalex", "crossref", "doaj", "core", "ssrn"]

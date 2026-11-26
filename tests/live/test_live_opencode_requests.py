@@ -18,8 +18,8 @@ import pytest
 import yaml
 from typer.testing import CliRunner
 
-from nfh.cli import app
-from nfh.config import TEMPLATE_DIR, load_project
+from rai.cli import app
+from rai.config import TEMPLATE_DIR, load_project
 
 from .test_live_opencode import _run, wait_for_servers
 
@@ -86,7 +86,7 @@ def fake_project(tmp_path_factory):
 
     root = tmp_path_factory.mktemp("fake") / "p"
     assert runner.invoke(app, ["new", "p", "--path", str(root)]).exit_code == 0
-    toml = root / "nfh.toml"
+    toml = root / "rai.toml"
     toml.write_text(
         toml.read_text()
         + f'\n[ollama]\nhost = "http://127.0.0.1:{port}"\n'
@@ -133,17 +133,17 @@ def last_request_for(project, agent: str) -> dict:
 def test_the_model_gets_the_briefing_and_exactly_the_agents_tools(fake_project, agent):
     request = last_request_for(fake_project, agent)
     assert MARKER in json.dumps(request["messages"]), (
-        "the briefing in .nfh/brief.md didn't reach the model"
+        "the briefing in .rai/brief.md didn't reach the model"
     )
     offered = {t["function"]["name"] for t in request.get("tools", [])}
     allowed = {
         r["action"]
         for r in frontmatter(agent)["permissions"]
-        if r["effect"] == "allow" and r["action"].startswith("nfh_")
+        if r["effect"] == "allow" and r["action"].startswith("rai_")
     }
-    offered_nfh = {n for n in offered if n.startswith("nfh_")}
-    assert offered_nfh == allowed, (
-        f"{agent}: offered {sorted(offered_nfh)}, intended {sorted(allowed)}"
+    offered_rai = {n for n in offered if n.startswith("rai_")}
+    assert offered_rai == allowed, (
+        f"{agent}: offered {sorted(offered_rai)}, intended {sorted(allowed)}"
     )
     writes = ("add_", "create_", "update_", "delete_", "attach_file", "manage_", "set_")
     zotero_writes = {

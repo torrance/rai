@@ -1,6 +1,6 @@
 import anyio
 
-from nfh.server import make_server
+from rai.server import make_server
 
 
 def test_server_exposes_the_tools(project):
@@ -48,7 +48,7 @@ def call(server, name, **arguments):
 
 def test_decision_tools_round_trip_through_the_server(project):
     """Calls the tools as an agent would, which checks their signatures too."""
-    from nfh import ledger
+    from rai import ledger
 
     server = make_server(project)
     (project.drafts_dir / "a.md").write_text("# A\n\nText.\n")
@@ -112,7 +112,7 @@ def test_record_decision_refreshes_the_briefing(project):
 
 
 def test_search_passages_reports_index_errors(project, monkeypatch):
-    import nfh.server as server_module
+    import rai.server as server_module
 
     def broken(*args, **kwargs):
         raise RuntimeError("Index was built with another embedding setup.")
@@ -126,13 +126,13 @@ def test_search_passages_reports_index_errors(project, monkeypatch):
 def test_set_reading_status_checks_the_source_exists(project):
     server = make_server(project)
     call(server, "set_reading_status", cite_key="nobody", status="read")
-    from nfh import ledger
+    from rai import ledger
 
     assert ledger.reading_statuses(project) == {}
 
 
 def test_save_candidate_builds_the_reading_list(project):
-    from nfh.candidates import save_candidate
+    from rai.candidates import save_candidate
 
     entry = {"title": "A paper", "url_or_doi": "10.1/abc", "verdict": "skip: old"}
     first = save_candidate(project, entry)
@@ -145,7 +145,7 @@ def test_save_candidate_builds_the_reading_list(project):
 
 
 def test_save_candidates_batch_reports_each_entry(project):
-    from nfh.candidates import save_candidates
+    from rai.candidates import save_candidates
 
     def candidate(ref: str, title: str) -> dict[str, str]:
         return {
@@ -198,7 +198,7 @@ def test_save_candidates_tool_accepts_a_batch(project):
 
 
 def test_record_session_round_trips_and_refreshes_the_briefing(project):
-    from nfh import ledger
+    from rai import ledger
 
     server = make_server(project)
     call(

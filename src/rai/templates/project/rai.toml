@@ -1,0 +1,27 @@
+# Project settings for rai. Everything this project produces stays in this folder.
+
+[project]
+name = "{{PROJECT_NAME}}"
+title = "{{PROJECT_TITLE}}"
+
+[zotero]
+# Which Zotero items belong to this project: a collection, tags, or both.
+# With both, an item must be in the collection AND carry the tags.
+collection = "{{COLLECTION}}"
+tags = {{TAGS}}
+tag_match = "any"            # any | all
+data_dir = "~/Zotero"        # Zotero's data directory (holds storage/)
+api = "http://127.0.0.1:23119/api"
+
+# Models, the Ollama address and OpenCode's naming come from the harness's
+# config.toml. To change one stage for this project only, repeat its section
+# here, e.g.
+#   [models]
+#   summarising = "opencode-go/<model-id>"
+# then run `rai sync`.
+
+[limits]
+candidate_max_tokens = 60000  # candidate texts up to this size are read whole
+
+[drafts]
+dir = "drafts"

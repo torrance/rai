@@ -5,7 +5,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from nfh import candidates
+from rai import candidates
 
 from .conftest import need_env
 
@@ -34,7 +34,7 @@ def test_unpaywall_email_works():
 
 
 def test_tinyfish_key_is_set():
-    """OpenCode's web search reads TINYFISH_API_KEY; `nfh open` passes it on."""
+    """OpenCode's web search reads TINYFISH_API_KEY; `rai open` passes it on."""
     need_env("TINYFISH_API_KEY")
 
 

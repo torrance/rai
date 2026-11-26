@@ -7,9 +7,9 @@ import json
 import numpy as np
 import pytest
 
-from nfh.config import CHAT_STAGES, parse_ref
-from nfh.embed import embed_query, embed_texts
-from nfh.llm import chat_json
+from rai.config import CHAT_STAGES, parse_ref
+from rai.embed import embed_query, embed_texts
+from rai.llm import chat_json
 
 from .conftest import advise
 
@@ -69,10 +69,10 @@ def test_chat_model_reports_tool_and_thinking_capabilities(ollama, project):
 
 
 def test_server_default_context_matches_project_and_fits_on_gpu(ollama, project):
-    """OpenCode sends no num_ctx, so Ollama's default must equal nfh's num_ctx.
+    """OpenCode sends no num_ctx, so Ollama's default must equal rai's num_ctx.
 
     If they differ, Ollama reloads the 120 GB model every time an agent and an
-    nfh job take turns.
+    rai job take turns.
     """
     ref = _local(project, "research")
     if ref is None:
@@ -91,14 +91,14 @@ def test_server_default_context_matches_project_and_fits_on_gpu(ollama, project)
     size, vram = entry.get("size", 0), entry.get("size_vram", 0)
     assert vram >= 0.99 * size, (
         f"only {vram / size:.0%} of the model is on GPU; lower OLLAMA_CONTEXT_LENGTH "
-        "and num_ctx in nfh.toml"
+        "and num_ctx in rai.toml"
     )
     ctx = entry.get("context_length")
     if ctx is None:
         pytest.skip("this Ollama version doesn't report context_length in /api/ps")
     print(f"Ollama allocated a context of {ctx} for OpenCode's requests")
     if project.models.num_ctx == 0:
-        return  # nfh asks for nothing, so there is nothing to disagree with
+        return  # rai asks for nothing, so there is nothing to disagree with
     assert ctx == project.models.num_ctx, (
         f"Ollama's default context is {ctx} but [models] num_ctx says "
         f"{project.models.num_ctx}. Set num_ctx = {ctx} (or 0 to use the server's "

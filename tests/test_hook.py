@@ -7,7 +7,7 @@ import time
 import pytest
 from typer.testing import CliRunner
 
-from nfh.cli import app
+from rai.cli import app
 
 pytestmark = pytest.mark.skipif(not shutil.which("git"), reason="git missing")
 runner = CliRunner()
@@ -19,7 +19,7 @@ def git(root, *args):
 
 
 def log_text(root):
-    path = root / ".nfh" / "logs" / "hook.log"
+    path = root / ".rai" / "logs" / "hook.log"
     return path.read_text() if path.exists() else ""
 
 
@@ -32,12 +32,12 @@ def wait_for_log(root, fragment, seconds=15):
     return False
 
 
-def test_hook_runs_nfh_only_after_commits_that_touch_drafts(tmp_path):
+def test_hook_runs_rai_only_after_commits_that_touch_drafts(tmp_path):
     root = tmp_path / "p"
     assert runner.invoke(app, ["new", "p", "--path", str(root)]).exit_code == 0
-    # Have the hook run `echo` in place of nfh, so the test needs no model.
-    toml = root / "nfh.toml"
-    toml.write_text(toml.read_text() + '\n[opencode]\nnfh_command = ["echo", "ran"]\n')
+    # Have the hook run `echo` in place of rai, so the test needs no model.
+    toml = root / "rai.toml"
+    toml.write_text(toml.read_text() + '\n[opencode]\nrai_command = ["echo", "ran"]\n')
     assert runner.invoke(app, ["--project", str(root), "sync"]).exit_code == 0
 
     git(root, "add", "-A")

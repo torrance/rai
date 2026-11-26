@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import pytest
 
-from nfh import cards, corpus_map, manuscript
-from nfh.brief import build_brief
-from nfh.check import check_quotes
-from nfh.ingest import ingest_local
-from nfh.search import read_location, search
-from nfh.store import Store
-from nfh.verify import verify_quote
+from rai import cards, corpus_map, manuscript
+from rai.brief import build_brief
+from rai.check import check_quotes
+from rai.ingest import ingest_local
+from rai.search import read_location, search
+from rai.store import Store
+from rai.verify import verify_quote
 
 pytestmark = [pytest.mark.live, pytest.mark.slow]
 

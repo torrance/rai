@@ -7,10 +7,10 @@ import numpy as np
 import pytest
 from typer.testing import CliRunner
 
-from nfh import config as cfg
-from nfh import jsonc
-from nfh.cli import app
-from nfh.config import (
+from rai import config as cfg
+from rai import jsonc
+from rai.cli import app
+from rai.config import (
     ConfigError,
     Project,
     describe,
@@ -21,8 +21,8 @@ from nfh.config import (
     opencode_base_url,
     parse_ref,
 )
-from nfh.embed import embed_query, embed_texts
-from nfh.store import Store
+from rai.embed import embed_query, embed_texts
+from rai.store import Store
 
 runner = CliRunner()
 
@@ -31,8 +31,8 @@ def cli(project, *args):
     return runner.invoke(app, ["--project", str(project.root), *args])
 
 
-def add_to_nfh_toml(project, text):
-    path = project.root / "nfh.toml"
+def add_to_rai_toml(project, text):
+    path = project.root / "rai.toml"
     path.write_text(path.read_text() + "\n" + text + "\n")
 
 
@@ -50,7 +50,7 @@ def test_shipped_config_is_complete_and_equals_the_builtin_defaults():
 
 
 def test_shipped_config_loads_without_complaint(monkeypatch):
-    monkeypatch.setattr("nfh.config.CONFIG_FILE", cfg.HARNESS_ROOT / "config.toml")
+    monkeypatch.setattr("rai.config.CONFIG_FILE", cfg.HARNESS_ROOT / "config.toml")
     settings = load_harness_settings()
     assert settings.models.reading == cfg.DEFAULT_READING_MODEL
     assert settings.models.summarising == cfg.DEFAULT_SUMMARISING_MODEL
@@ -69,11 +69,11 @@ def test_layers_override_in_order_and_report_their_source(tmp_path, monkeypatch)
         '[models]\nreading = "ollama/from-harness"\nembedding = "ollama/e1"\n'
     )
     local.write_text('[models]\nreading = "ollama/from-local"\n')
-    monkeypatch.setattr("nfh.config.CONFIG_FILE", harness)
-    monkeypatch.setattr("nfh.config.LOCAL_CONFIG_FILE", local)
+    monkeypatch.setattr("rai.config.CONFIG_FILE", harness)
+    monkeypatch.setattr("rai.config.LOCAL_CONFIG_FILE", local)
     root = tmp_path / "p"
     root.mkdir()
-    (root / "nfh.toml").write_text(
+    (root / "rai.toml").write_text(
         '[project]\nname = "p"\n[models]\nembedding = "ollama/e2"\n'
     )
     project = load_project(root)
@@ -81,7 +81,7 @@ def test_layers_override_in_order_and_report_their_source(tmp_path, monkeypatch)
     assert project.models.embedding == "ollama/e2"
     sources = {(s, k): src for s, k, _, src in describe(project)}
     assert sources[("models", "reading")] == "config.local.toml"
-    assert sources[("models", "embedding")] == "nfh.toml"
+    assert sources[("models", "embedding")] == "rai.toml"
     assert sources[("models", "num_ctx")] == cfg.BUILTIN
 
 
@@ -100,17 +100,17 @@ def test_layers_override_in_order_and_report_their_source(tmp_path, monkeypatch)
         ('[models]\nquery_template = "no placeholder"\n', "must contain {query}"),
         ('[models]\ndocument_template = "none"\n', "must contain {text}"),
         ('[ollama]\nhost = " "\n', "host can't be empty"),
-        ("[opencode]\nnfh_command = 3\n", "nfh_command should be a list"),
+        ("[opencode]\nrai_command = 3\n", "rai_command should be a list"),
     ],
 )
 def test_bad_settings_are_rejected_with_a_useful_message(tmp_path, toml, fragment):
     root = tmp_path / "p"
     root.mkdir()
-    (root / "nfh.toml").write_text(toml)
+    (root / "rai.toml").write_text(toml)
     with pytest.raises(ConfigError) as err:
         load_project(root)
     assert fragment in str(err.value)
-    assert "nfh.toml" in str(err.value) or "nfh config" in str(err.value)
+    assert "rai.toml" in str(err.value) or "rai config" in str(err.value)
 
 
 # The Ollama address ---------------------------------------------------------
@@ -132,7 +132,7 @@ def test_host_env_override_and_opencode_address(project, monkeypatch):
     project.ollama.host = "127.0.0.1:11435"
     assert ollama_host(project) == "http://127.0.0.1:11435"
     assert opencode_base_url(project) == "http://127.0.0.1:11435/v1"
-    monkeypatch.setenv("NFH_OLLAMA_HOST", "http://other:1")
+    monkeypatch.setenv("RAI_OLLAMA_HOST", "http://other:1")
     assert ollama_host(project) == "http://other:1"
     assert opencode_base_url(project) == "http://127.0.0.1:11435/v1"  # file only
     project.ollama.opencode_base_url = "http://elsewhere:2/v1/"
@@ -172,7 +172,7 @@ class FakeResponse:
 
 @pytest.mark.parametrize("num_ctx, expected", [(131072, {"num_ctx": 131072}), (0, {})])
 def test_num_ctx_is_sent_only_when_set(project, monkeypatch, num_ctx, expected):
-    from nfh import llm
+    from rai import llm
 
     seen = []
     monkeypatch.setattr(
@@ -194,7 +194,7 @@ def test_embedding_templates_wrap_queries_and_documents(project, monkeypatch):
         seen.append(list(batch))
         return [[1.0] * dims for _ in batch]
 
-    monkeypatch.setattr("nfh.embed._request", fake_request)
+    monkeypatch.setattr("rai.embed._request", fake_request)
     embed_texts(project, ["a passage"])
     embed_query(project, "a question")
     assert seen[0] == ["a passage"]  # default: documents are not wrapped
@@ -244,8 +244,8 @@ def test_defaults_render_the_stage_models(project):
     model = provider["models"][local_model]
     assert model["modelID"] == local_model
     assert model["variants"] == [{"id": "quick", "body": {"reasoning_effort": "low"}}]
-    assert config["mcp"]["servers"]["nfh"]["command"] == [
-        "uv", "run", "--project", str(cfg.HARNESS_ROOT), "nfh",
+    assert config["mcp"]["servers"]["rai"]["command"] == [
+        "uv", "run", "--project", str(cfg.HARNESS_ROOT), "rai",
         "--project", ".", "serve",
     ]  # fmt: skip
     agents = project.root / ".opencode" / "agents"
@@ -257,11 +257,11 @@ def test_defaults_render_the_stage_models(project):
     ).read_text()
     assert f'model: "{project.models.reading}"' in (agents / "reader.md").read_text()
     hook = (project.root / ".githooks" / "post-commit").read_text()
-    assert f"NFH='uv run --project {cfg.HARNESS_ROOT} nfh'" in hook
+    assert f"RAI='uv run --project {cfg.HARNESS_ROOT} rai'" in hook
 
 
 def test_opencode_go_stages_need_no_generated_provider_block(project):
-    add_to_nfh_toml(
+    add_to_rai_toml(
         project,
         '[models]\nreading = "ollama/local-reader"\n'
         'summarising = "opencode-go/summary"\n'
@@ -280,7 +280,7 @@ def test_opencode_go_stages_need_no_generated_provider_block(project):
 
 
 def test_bare_stage_refs_render_with_their_provider(project):
-    add_to_nfh_toml(
+    add_to_rai_toml(
         project,
         '[models]\nreading = "qwen3:8b"\nresearch = "qwen3:8b"\n'
         'sparring = "qwen3:8b"\n',
@@ -295,7 +295,7 @@ def test_bare_stage_refs_render_with_their_provider(project):
 
 
 def test_an_all_go_project_needs_no_provider_blocks(project):
-    add_to_nfh_toml(
+    add_to_rai_toml(
         project,
         '[models]\nreading = "opencode-go/reader"\n'
         'summarising = "opencode-go/summary"\n'
@@ -316,7 +316,7 @@ def test_a_fresh_project_is_in_sync(project):
 
 
 def test_changing_settings_then_syncing_updates_every_generated_value(project):
-    add_to_nfh_toml(
+    add_to_rai_toml(
         project,
         '[ollama]\nhost = "127.0.0.1:11435"\n'
         '[models]\nreading = "ollama/reader-model"\n'
@@ -325,7 +325,7 @@ def test_changing_settings_then_syncing_updates_every_generated_value(project):
         'sparring = "ollama/sparring-model"\n'
         'embedding = "ollama/embed-model"\n'
         '[opencode]\nquick_variant = "fast"\n'
-        'quick_reasoning_effort = ""\nnfh_command = ["nfh"]\n',
+        'quick_reasoning_effort = ""\nrai_command = ["rai"]\n',
     )
     check = cli(project, "sync", "--check")
     assert check.exit_code == 1 and "opencode.jsonc" in check.output
@@ -345,8 +345,8 @@ def test_changing_settings_then_syncing_updates_every_generated_value(project):
         "research-model",
         "sparring-model",
     }
-    assert config["mcp"]["servers"]["nfh"]["command"] == [
-        "nfh", "--project", ".", "serve",
+    assert config["mcp"]["servers"]["rai"]["command"] == [
+        "rai", "--project", ".", "serve",
     ]  # fmt: skip
     agents = project.root / ".opencode" / "agents"
     assert 'model: "ollama/research-model"' in (
@@ -356,7 +356,7 @@ def test_changing_settings_then_syncing_updates_every_generated_value(project):
         agents / "sparring.md"
     ).read_text()
     assert 'model: "ollama/reader-model"' in (agents / "reader.md").read_text()
-    assert "NFH='nfh'" in (project.root / ".githooks" / "post-commit").read_text()
+    assert "RAI='rai'" in (project.root / ".githooks" / "post-commit").read_text()
     # only the model line of an agent changes; its instructions stay as they were
     assert "You are the Research Assistant" in (agents / "assistant.md").read_text()
 
@@ -364,20 +364,20 @@ def test_changing_settings_then_syncing_updates_every_generated_value(project):
 def test_hand_edited_generated_files_are_not_overwritten(project):
     path = project.root / "opencode.jsonc"
     path.write_text(path.read_text() + "// my own note\n")
-    add_to_nfh_toml(project, '[models]\nresearch = "ollama/other-model"\n')
+    add_to_rai_toml(project, '[models]\nresearch = "ollama/other-model"\n')
     result = cli(project, "sync")
     assert result.exit_code == 1 and "edited by hand" in result.output
     assert "my own note" in path.read_text()
     assert "other-model" not in path.read_text()
-    assert "other-model" in (project.root / "opencode.jsonc.nfh-new").read_text()
+    assert "other-model" in (project.root / "opencode.jsonc.rai-new").read_text()
     forced = cli(project, "sync", "--force")
     assert forced.exit_code == 0
     assert "other-model" in path.read_text()
-    assert not (project.root / "opencode.jsonc.nfh-new").exists()
+    assert not (project.root / "opencode.jsonc.rai-new").exists()
 
 
 def test_sync_all_covers_every_project_in_projects(tmp_path, monkeypatch):
-    monkeypatch.setattr("nfh.cli.PROJECTS_DIR", tmp_path / "projects")
+    monkeypatch.setattr("rai.cli.PROJECTS_DIR", tmp_path / "projects")
     for name in ("alpha", "beta"):
         assert runner.invoke(app, ["new", name, "--no-git"]).exit_code == 0
     shared = tmp_path / "config.toml"
@@ -387,7 +387,7 @@ def test_sync_all_covers_every_project_in_projects(tmp_path, monkeypatch):
         'research = "ollama/local"\nsparring = "ollama/local"\n'
         'embedding = "ollama/local-embed"\n'
     )
-    monkeypatch.setattr("nfh.config.CONFIG_FILE", shared)
+    monkeypatch.setattr("rai.config.CONFIG_FILE", shared)
     result = runner.invoke(app, ["sync", "--all"])
     assert result.exit_code == 0, result.output
     for name in ("alpha", "beta"):
@@ -396,9 +396,9 @@ def test_sync_all_covers_every_project_in_projects(tmp_path, monkeypatch):
 
 
 def test_config_command_shows_values_and_sources(project):
-    add_to_nfh_toml(project, '[models]\nsummarising = "ollama/mine"\n')
+    add_to_rai_toml(project, '[models]\nsummarising = "ollama/mine"\n')
     out = cli(project, "config").output
-    assert "[models] summarising = 'ollama/mine'   <- nfh.toml" in out
+    assert "[models] summarising = 'ollama/mine'   <- rai.toml" in out
     assert "[models] num_ctx = 262144   <- built-in default" in out
     assert "OpenCode reaches it at http://127.0.0.1:11434/v1" in out
 
@@ -417,16 +417,16 @@ def test_doctor_lists_what_the_server_has_when_a_name_is_missing(project, monkey
         "FIX  reading model ollama/qwen3.8-flash-next:125b-a6b-q4_K_M" in out
     )
     assert "the server has: gemma4:31b, qwen3.6:27b" in out
-    assert "nfh ignores it" in out
+    assert "rai ignores it" in out
 
 
 def test_doctor_flags_project_files_that_lag_the_settings(project, monkeypatch):
     monkeypatch.setattr("httpx.get", lambda *a, **k: FakeTags())
-    add_to_nfh_toml(project, '[models]\nreading = "ollama/qwen3.6:27b"\n')
+    add_to_rai_toml(project, '[models]\nreading = "ollama/qwen3.6:27b"\n')
     out = cli(project, "doctor").output
     assert "ok   reading model ollama/qwen3.6:27b" in out
     assert "FIX  opencode.jsonc, agent models and git hook match the settings" in out
-    assert "run `nfh sync`" in out
+    assert "run `rai sync`" in out
 
 
 class FakeGoModels:
@@ -446,7 +446,7 @@ class FakeGoModels:
 
 
 def test_doctor_checks_every_go_stage_and_the_key(project, monkeypatch):
-    add_to_nfh_toml(
+    add_to_rai_toml(
         project,
         '[models]\nreading = "opencode-go/reader"\n'
         'summarising = "opencode-go/summary"\n'
@@ -471,7 +471,7 @@ def test_doctor_outside_a_project_uses_the_harness_settings(tmp_path, monkeypatc
 
 
 def test_serve_reports_a_bad_setting_plainly_instead_of_crashing(project):
-    add_to_nfh_toml(project, '[models]\nchatt = "x"\n')
+    add_to_rai_toml(project, '[models]\nchatt = "x"\n')
     result = cli(project, "serve")
     assert result.exit_code == 1
     assert "unknown setting [models] chatt" in result.output
@@ -502,7 +502,7 @@ def test_the_paper_search_server_is_started_with_the_default_sources(project):
 
 
 def test_changing_the_paper_sources_follows_through_sync(project):
-    add_to_nfh_toml(project, '[scout]\npaper_sources = ["crossref", "hal"]')
+    add_to_rai_toml(project, '[scout]\npaper_sources = ["crossref", "hal"]')
     assert cli(project, "sync").exit_code == 0
     assert "ALL_SOURCES[:] = ['crossref', 'hal']" in papers_code(project)
 
@@ -518,7 +518,7 @@ def test_changing_the_paper_sources_follows_through_sync(project):
 def test_bad_paper_sources_are_rejected(tmp_path, toml, fragment):
     root = tmp_path / "p"
     root.mkdir()
-    (root / "nfh.toml").write_text(toml)
+    (root / "rai.toml").write_text(toml)
     with pytest.raises(ConfigError) as err:
         load_project(root)
     assert fragment in str(err.value)

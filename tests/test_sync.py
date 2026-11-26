@@ -1,21 +1,21 @@
-"""`nfh sync` follows settings and newer templates without losing your edits."""
+"""`rai sync` follows settings and newer templates without losing your edits."""
 
 import shutil
 
 import pytest
 
-from nfh.config import TEMPLATE_DIR, load_project
-from nfh.render import _load_records, _save_records, _sha, sync_project
+from rai.config import TEMPLATE_DIR, load_project
+from rai.render import _load_records, _save_records, _sha, sync_project
 
 ASSISTANT = ".opencode/agents/assistant.md"
 
 
 @pytest.fixture
 def newer_template(tmp_path, monkeypatch):
-    """A copy of the template, as a later version of nfh might ship it."""
+    """A copy of the template, as a later version of rai might ship it."""
     copy = tmp_path / "template"
     shutil.copytree(TEMPLATE_DIR, copy)
-    monkeypatch.setattr("nfh.render.TEMPLATE_DIR", copy)
+    monkeypatch.setattr("rai.render.TEMPLATE_DIR", copy)
     return copy
 
 
@@ -40,7 +40,7 @@ def test_your_edit_is_kept_when_nothing_new_arrives(project):
     result = sync_project(project)
     assert ASSISTANT in result.kept and not result.conflicts
     assert "My own rule." in assistant(project).read_text()
-    assert not assistant(project).with_name("assistant.md.nfh-new").exists()
+    assert not assistant(project).with_name("assistant.md.rai-new").exists()
     assert sync_project(project, check=True).drift == []
 
 
@@ -51,20 +51,20 @@ def test_your_edit_and_a_newer_template_conflict(project, newer_template):
     assert ASSISTANT in result.conflicts
     mine = assistant(project).read_text()
     assert "My own rule." in mine and "Upstream rule." not in mine
-    beside = assistant(project).with_name("assistant.md.nfh-new").read_text()
+    beside = assistant(project).with_name("assistant.md.rai-new").read_text()
     assert "Upstream rule." in beside
     assert ASSISTANT in sync_project(project, check=True).drift  # until you merge
 
 
 def test_a_model_change_updates_only_the_model_line_of_an_edited_agent(project):
     add_line(assistant(project), "My own rule.")
-    add_line(project.root / "nfh.toml", '[models]\nresearch = "ollama/mine"')
+    add_line(project.root / "rai.toml", '[models]\nresearch = "ollama/mine"')
     project = load_project(project.root)
     result = sync_project(project)
     text = assistant(project).read_text()
     assert 'model: "ollama/mine"' in text and "My own rule." in text
     assert ASSISTANT in result.written and ASSISTANT not in result.conflicts
-    assert not assistant(project).with_name("assistant.md.nfh-new").exists()
+    assert not assistant(project).with_name("assistant.md.rai-new").exists()
 
 
 def test_a_deleted_agent_stays_deleted_until_forced(project):
@@ -76,24 +76,24 @@ def test_a_deleted_agent_stays_deleted_until_forced(project):
 
 
 def test_a_project_from_an_earlier_version_gets_new_files_beside_its_own(project):
-    (project.state_dir / "sync.json").unlink()  # no record of what nfh wrote
+    (project.state_dir / "sync.json").unlink()  # no record of what rai wrote
     assistant(project).write_text("an old-style agent\n")
     result = sync_project(project)
     assert ASSISTANT in result.conflicts
     assert assistant(project).read_text() == "an old-style agent\n"
-    assert assistant(project).with_name("assistant.md.nfh-new").exists()
+    assert assistant(project).with_name("assistant.md.rai-new").exists()
     sync_project(project, force=True)  # the way to accept everything
     assert "You are the Research Assistant" in assistant(project).read_text()
-    assert not assistant(project).with_name("assistant.md.nfh-new").exists()
+    assert not assistant(project).with_name("assistant.md.rai-new").exists()
     assert sync_project(project, check=True).drift == []
 
 
-# Agent files nfh stopped shipping -------------------------------------------------
+# Agent files rai stopped shipping -------------------------------------------------
 RETIRED = ".opencode/agents/scout.md"
 
 
 def retire(project, text, *, record_text=None):
-    """Plant a file nfh once wrote and no longer ships (as after an upgrade)."""
+    """Plant a file rai once wrote and no longer ships (as after an upgrade)."""
     path = project.root / RETIRED
     path.write_text(text)
     records = _load_records(project)
@@ -116,11 +116,11 @@ def test_an_untouched_retired_agent_is_removed(project):
 
 def test_a_retired_agent_you_edited_is_left_as_yours(project):
     path = retire(project, "my edited scout\n", record_text="the old scout\n")
-    assert sync_project(project, check=True).drift == []  # nothing nfh would change
+    assert sync_project(project, check=True).drift == []  # nothing rai would change
     result = sync_project(project)
     assert RETIRED in result.kept and RETIRED not in result.retired
     assert path.read_text() == "my edited scout\n"
-    assert RETIRED not in _load_records(project)  # nfh stops tracking it
+    assert RETIRED not in _load_records(project)  # rai stops tracking it
     assert RETIRED not in sync_project(project).kept
 
 

@@ -5,9 +5,9 @@ import re
 import anyio
 import yaml
 
-from nfh import jsonc
-from nfh.config import TEMPLATE_DIR
-from nfh.server import make_server
+from rai import jsonc
+from rai.config import TEMPLATE_DIR
+from rai.server import make_server
 
 AGENTS = TEMPLATE_DIR / ".opencode" / "agents"
 COMMANDS = TEMPLATE_DIR / ".opencode" / "commands"
@@ -25,7 +25,7 @@ def test_jsonc_handles_urls_comments_and_trailing_commas():
 
 
 def test_project_template_uses_stage_model_keys_only():
-    text = (TEMPLATE_DIR / "nfh.toml").read_text()
+    text = (TEMPLATE_DIR / "rai.toml").read_text()
     assert "[models] chat" not in text
     assert "Scout" not in text
     assert 'summarising = "opencode-go/<model-id>"' in text
@@ -33,16 +33,16 @@ def test_project_template_uses_stage_model_keys_only():
 
 def test_rendered_config_parses_and_names_servers(project):
     config = jsonc.load(project.root / "opencode.jsonc")
-    assert set(config["mcp"]["servers"]) == {"nfh", "zotero", "papers"}
-    assert config["instructions"] == [".nfh/brief.md"]
+    assert set(config["mcp"]["servers"]) == {"rai", "zotero", "papers"}
+    assert config["instructions"] == [".rai/brief.md"]
 
 
-def test_every_nfh_tool_named_in_permissions_exists(project):
+def test_every_rai_tool_named_in_permissions_exists(project):
     tools = {t.name for t in anyio.run(make_server(project).list_tools)}
     for path in AGENTS.glob("*.md"):
         for rule in frontmatter(path)["permissions"]:
             action = rule["action"]
-            if action.startswith("nfh_"):
+            if action.startswith("rai_"):
                 assert action[4:] in tools, f"{path.name}: no tool {action}"
 
 
@@ -86,7 +86,7 @@ def test_no_agent_allows_every_zotero_tool():
 def test_pytorch_comes_from_the_cpu_only_index():
     import tomllib
 
-    from nfh.config import HARNESS_ROOT
+    from rai.config import HARNESS_ROOT
 
     data = tomllib.loads((HARNESS_ROOT / "pyproject.toml").read_text())
     indexes = {i["name"]: i for i in data["tool"]["uv"]["index"]}
@@ -98,7 +98,7 @@ def test_pytorch_comes_from_the_cpu_only_index():
 
 
 def test_model_cache_lives_in_the_harness(monkeypatch):
-    from nfh.config import HARNESS_ROOT, MODEL_CACHE, load_env
+    from rai.config import HARNESS_ROOT, MODEL_CACHE, load_env
 
     monkeypatch.delenv("HF_HOME", raising=False)
     load_env()
@@ -163,7 +163,7 @@ def test_every_server_tool_is_given_to_at_least_one_agent(project):
         r["action"][4:]
         for path in AGENTS.glob("*.md")
         for r in frontmatter(path)["permissions"]
-        if r["action"].startswith("nfh_") and r["effect"] == "allow"
+        if r["action"].startswith("rai_") and r["effect"] == "allow"
     }
     assert tools - granted == set(), f"no agent can use: {sorted(tools - granted)}"
     assert granted - tools == set(), (
@@ -186,9 +186,9 @@ def test_outside_search_goes_to_the_assistant_and_sparring_only():
             if r["effect"] == "allow"
         }
         assert {"websearch", "papers_search_papers"} <= allowed, name
-        assert {"nfh_read_candidate", "nfh_save_candidate"} <= allowed, name
+        assert {"rai_read_candidate", "rai_save_candidate"} <= allowed, name
     reader = {r["action"] for r in frontmatter(AGENTS / "reader.md")["permissions"]}
-    assert not reader & {"websearch", "papers_search_papers", "nfh_save_candidate"}
+    assert not reader & {"websearch", "papers_search_papers", "rai_save_candidate"}
 
 
 def test_the_assistant_is_told_to_search_outside_only_when_asked():
@@ -208,6 +208,6 @@ def test_wrap_asks_for_the_three_parts_and_both_conversational_agents_can_record
             for r in frontmatter(AGENTS / f"{name}.md")["permissions"]
             if r["effect"] == "allow"
         }
-        assert "nfh_record_session" in allowed, name
+        assert "rai_record_session" in allowed, name
     reader = {r["action"] for r in frontmatter(AGENTS / "reader.md")["permissions"]}
-    assert "nfh_record_session" not in reader
+    assert "rai_record_session" not in reader

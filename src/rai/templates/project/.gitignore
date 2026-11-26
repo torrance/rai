@@ -1,0 +1,4 @@
+# Everything rai builds can be rebuilt, so it isn't tracked, except the ledger:
+# your recorded decisions can't be rebuilt.
+.rai/*
+!.rai/ledger/

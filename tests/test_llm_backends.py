@@ -6,8 +6,8 @@ import json
 
 import pytest
 
-from nfh import embed, llm
-from nfh.config import (
+from rai import embed, llm
+from rai.config import (
     OPENCODE_GO_CHAT_URL,
     OPENCODE_GO_EMBEDDINGS_URL,
     opencode_go_key,
@@ -85,12 +85,12 @@ def test_go_chat_posts_to_the_openai_endpoint_with_its_headers(project, monkeypa
             captured.update(url=url, json=json, headers=headers)
             return go_reply("ok")
 
-    monkeypatch.setattr("nfh.llm.httpx.Client", Client)
+    monkeypatch.setattr("rai.llm.httpx.Client", Client)
     assert llm.chat(project, "s", "u", stage="research") == "ok"
     assert captured["url"] == OPENCODE_GO_CHAT_URL
     assert captured["headers"]["Authorization"] == "Bearer test-key"
-    assert captured["headers"]["User-Agent"] == "nfh/0.1"
-    assert captured["headers"]["x-opencode-session"].startswith("ses_nfh_")
+    assert captured["headers"]["User-Agent"] == "rai/0.1"
+    assert captured["headers"]["x-opencode-session"].startswith("ses_rai_")
 
 
 def test_go_schema_rejection_falls_back_to_prompted_json(project, monkeypatch):
@@ -164,7 +164,7 @@ def test_go_embeddings_send_dimensions_and_sort_by_index(project, monkeypatch):
                 },
             )
 
-    monkeypatch.setattr("nfh.embed.httpx.Client", Client)
+    monkeypatch.setattr("rai.embed.httpx.Client", Client)
     vectors = embed.embed_texts(project, ["a", "b"])
     assert vectors.shape == (2, 3)
     assert requests[0]["url"] == OPENCODE_GO_EMBEDDINGS_URL
@@ -199,7 +199,7 @@ def test_go_embeddings_retry_without_dimensions(project, monkeypatch):
                 {"data": [{"index": 0, "embedding": [1.0, 0.0, 0.0]}]},
             )
 
-    monkeypatch.setattr("nfh.embed.httpx.Client", Client)
+    monkeypatch.setattr("rai.embed.httpx.Client", Client)
     vectors = embed.embed_texts(project, ["a"])
     assert vectors.shape == (1, 3)
     assert len(calls) == 2 and "dimensions" not in calls[1]

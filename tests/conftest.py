@@ -10,8 +10,8 @@ import numpy as np
 import pytest
 from typer.testing import CliRunner
 
-from nfh.cli import app
-from nfh.config import load_project
+from rai.cli import app
+from rai.config import load_project
 
 DIMS = 1024
 TEST_CHAT_MODEL = "ollama/qwen3.8-flash-next:125b-a6b-q4_K_M"
@@ -19,7 +19,7 @@ TEST_EMBED_MODEL = "ollama/qwen3-embedding:0.6b"
 
 
 def pytest_addoption(parser):
-    group = parser.getgroup("nfh live")
+    group = parser.getgroup("rai live")
     group.addoption("--live", action="store_true", help="Run tests against your setup")
     group.addoption("--slow", action="store_true", help="Include slow live tests")
     group.addoption("--agents", action="store_true", help="Include OpenCode agent runs")
@@ -67,9 +67,9 @@ def _hermetic_config(request, monkeypatch, tmp_path):
         f'embedding = "{TEST_EMBED_MODEL}"\n'
         f"embedding_dims = {DIMS}\n"
     )
-    monkeypatch.setattr("nfh.config.CONFIG_FILE", test_config)
-    monkeypatch.setattr("nfh.config.LOCAL_CONFIG_FILE", tmp_path / "absent-local.toml")
-    monkeypatch.delenv("NFH_OLLAMA_HOST", raising=False)
+    monkeypatch.setattr("rai.config.CONFIG_FILE", test_config)
+    monkeypatch.setattr("rai.config.LOCAL_CONFIG_FILE", tmp_path / "absent-local.toml")
+    monkeypatch.delenv("RAI_OLLAMA_HOST", raising=False)
 
 
 @pytest.fixture
@@ -80,9 +80,9 @@ def fake_ollama(monkeypatch):
     def embed_query(project, query):
         return fake_vectors([query])[0]
 
-    for module in ("nfh.embed", "nfh.ingest", "nfh.cards"):
+    for module in ("rai.embed", "rai.ingest", "rai.cards"):
         monkeypatch.setattr(f"{module}.embed_texts", embed_texts, raising=False)
-    monkeypatch.setattr("nfh.search.embed_query", embed_query)
+    monkeypatch.setattr("rai.search.embed_query", embed_query)
     return embed_texts
 
 

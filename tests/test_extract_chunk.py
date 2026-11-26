@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pymupdf
 
-from nfh.chunk import make_chunks, make_units, marked_text
-from nfh.extract import _plain, extract
+from rai.chunk import make_chunks, make_units, marked_text
+from rai.extract import _plain, extract
 
 from .conftest import SAMPLE
 

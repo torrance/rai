@@ -1,7 +1,7 @@
 import httpx
 
-from nfh.config import ZoteroSettings
-from nfh.zotero import Zotero, make_cite_key
+from rai.config import ZoteroSettings
+from rai.zotero import Zotero, make_cite_key
 
 ITEMS = [
     {

@@ -5,8 +5,8 @@ from __future__ import annotations
 import pymupdf
 import pytest
 
-from nfh.extract import extract
-from nfh.zotero import Zotero
+from rai.extract import extract
+from rai.zotero import Zotero
 
 pytestmark = pytest.mark.live
 

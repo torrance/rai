@@ -1,8 +1,8 @@
 import httpx
 from typer.testing import CliRunner
 
-from nfh import candidates
-from nfh.cli import app
+from rai import candidates
+from rai.cli import app
 
 runner = CliRunner()
 
@@ -18,7 +18,7 @@ def test_status_warns_when_generated_files_are_out_of_sync(project):
     (project.root / "opencode.jsonc").unlink()
     result = runner.invoke(app, ["--project", str(project.root), "status"])
     assert result.exit_code == 0, result.output
-    assert "out of sync" in result.output and "nfh sync" in result.output
+    assert "out of sync" in result.output and "rai sync" in result.output
 
 
 def test_show_help_lists_sources():
@@ -27,7 +27,7 @@ def test_show_help_lists_sources():
 
 
 def test_ingest_without_zotero_explains(project):
-    project_toml = project.root / "nfh.toml"
+    project_toml = project.root / "rai.toml"
     project_toml.write_text(
         project_toml.read_text().replace(
             'api = "http://127.0.0.1:23119/api"', 'api = "http://127.0.0.1:9/api"'

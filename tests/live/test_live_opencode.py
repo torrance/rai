@@ -16,7 +16,7 @@ import time
 
 import pytest
 
-from nfh.brief import build_brief
+from rai.brief import build_brief
 
 pytestmark = pytest.mark.live
 
@@ -45,7 +45,7 @@ def _run(project, *args: str, timeout: int = TIMEOUT) -> subprocess.CompletedPro
 
 @pytest.fixture(scope="module")
 def session_project(scratch_project):
-    build_brief(scratch_project)  # opencode.jsonc lists .nfh/brief.md
+    build_brief(scratch_project)  # opencode.jsonc lists .rai/brief.md
     return scratch_project
 
 
@@ -70,7 +70,7 @@ def test_opencode_is_version_2(session_project):
 def wait_for_servers(project, seconds=180):
     """OpenCode 2 starts a background service on first use, so the servers take a
     moment to connect (and before then `mcp list` may report none at all)."""
-    names = ("nfh", "zotero", "papers")
+    names = ("rai", "zotero", "papers")
     deadline = time.monotonic() + seconds
     while True:
         result = _run(project, "mcp", "list", timeout=600)
@@ -129,7 +129,7 @@ def test_agents_load_and_the_drafts_guard_holds_in_opencodes_own_rules(
         assert name in agents, f"{name} didn't load: {sorted(agents)}"
     assert "build" not in agents and "plan" not in agents, "built-in agents are on"
 
-    from nfh.config import parse_ref
+    from rai.config import parse_ref
 
     expected_models = {
         "assistant": project.models.research,
@@ -142,7 +142,7 @@ def test_agents_load_and_the_drafts_guard_holds_in_opencodes_own_rules(
         assert (model.get("providerID"), model.get("id")) == (
             expected.provider,
             expected.model,
-        ), f"{name} uses {model}; run `nfh sync`"
+        ), f"{name} uses {model}; run `rai sync`"
 
     for name in ours:
         for path in ("drafts/ch1.md", "drafts/sub/ch2.typ"):
@@ -155,7 +155,7 @@ def test_agents_load_and_the_drafts_guard_holds_in_opencodes_own_rules(
             assert _effect(agents[name], action, resource) == "deny", f"{name} {action}"
 
     for name in ours:  # nobody edits the internal notes or the ledger directly
-        for path in (".nfh/library.db", ".nfh/ledger/decisions.jsonl"):
+        for path in (".rai/library.db", ".rai/ledger/decisions.jsonl"):
             assert _effect(agents[name], "edit", path) == "deny", f"{name} {path}"
 
     expected = {
@@ -164,13 +164,13 @@ def test_agents_load_and_the_drafts_guard_holds_in_opencodes_own_rules(
         ("assistant", "edit", "reports/feedback/x.md"): "deny",
         ("assistant", "edit", "project.md"): "ask",
         ("assistant", "subagent", "reader"): "allow",
-        ("assistant", "nfh_verify_quote", "*"): "allow",
-        ("assistant", "nfh_update_claim", "*"): "allow",
-        ("assistant", "nfh_save_candidate", "*"): "allow",
-        ("assistant", "nfh_save_candidates", "*"): "allow",
-        ("assistant", "nfh_decide_candidate", "*"): "allow",
-        ("assistant", "nfh_record_session", "*"): "allow",
-        ("assistant", "nfh_raise_objections", "*"): "deny",
+        ("assistant", "rai_verify_quote", "*"): "allow",
+        ("assistant", "rai_update_claim", "*"): "allow",
+        ("assistant", "rai_save_candidate", "*"): "allow",
+        ("assistant", "rai_save_candidates", "*"): "allow",
+        ("assistant", "rai_decide_candidate", "*"): "allow",
+        ("assistant", "rai_record_session", "*"): "allow",
+        ("assistant", "rai_raise_objections", "*"): "deny",
         ("assistant", "websearch", "anything"): "allow",
         ("assistant", "papers_search_papers", "*"): "allow",
         ("assistant", "zotero_zotero_get_item_metadata", "*"): "allow",
@@ -178,25 +178,25 @@ def test_agents_load_and_the_drafts_guard_holds_in_opencodes_own_rules(
         ("sparring", "edit", "reports/feedback/x.md"): "allow",
         ("sparring", "edit", "reports/research/x.md"): "deny",
         ("sparring", "edit", "project.md"): "deny",
-        ("sparring", "nfh_update_claim", "*"): "deny",
-        ("sparring", "nfh_decide_candidate", "*"): "allow",
-        ("sparring", "nfh_verify_quote", "*"): "allow",
-        ("sparring", "nfh_raise_objections", "*"): "allow",
-        ("sparring", "nfh_resolve_objection", "*"): "allow",
-        ("sparring", "nfh_record_session", "*"): "allow",
-        ("sparring", "nfh_read_candidate", "*"): "allow",
-        ("sparring", "nfh_save_candidate", "*"): "allow",
-        ("sparring", "nfh_save_candidates", "*"): "allow",
+        ("sparring", "rai_update_claim", "*"): "deny",
+        ("sparring", "rai_decide_candidate", "*"): "allow",
+        ("sparring", "rai_verify_quote", "*"): "allow",
+        ("sparring", "rai_raise_objections", "*"): "allow",
+        ("sparring", "rai_resolve_objection", "*"): "allow",
+        ("sparring", "rai_record_session", "*"): "allow",
+        ("sparring", "rai_read_candidate", "*"): "allow",
+        ("sparring", "rai_save_candidate", "*"): "allow",
+        ("sparring", "rai_save_candidates", "*"): "allow",
         ("sparring", "websearch", "anything"): "allow",
         ("sparring", "papers_search_papers", "*"): "allow",
         ("sparring", "zotero_zotero_get_item_metadata", "*"): "deny",
         ("reader", "edit", "reports/research/x.md"): "deny",
-        ("reader", "nfh_record_decision", "*"): "deny",
-        ("reader", "nfh_record_session", "*"): "deny",
-        ("reader", "nfh_read_notes", "*"): "allow",
-        ("reader", "nfh_verify_quote", "*"): "allow",
-        ("reader", "nfh_read_candidate", "*"): "allow",
-        ("reader", "nfh_read_candidate_section", "*"): "allow",
+        ("reader", "rai_record_decision", "*"): "deny",
+        ("reader", "rai_record_session", "*"): "deny",
+        ("reader", "rai_read_notes", "*"): "allow",
+        ("reader", "rai_verify_quote", "*"): "allow",
+        ("reader", "rai_read_candidate", "*"): "allow",
+        ("reader", "rai_read_candidate_section", "*"): "allow",
         ("reader", "websearch", "anything"): "deny",
     }
     wrong = {
@@ -216,7 +216,7 @@ def agent_run(session_project):
     ):
         pytest.skip("this OpenCode version has no `opencode run --agent`")
 
-    wait_for_servers(session_project)  # else the first prompt has no nfh tools
+    wait_for_servers(session_project)  # else the first prompt has no rai tools
 
     def run(agent: str, prompt: str) -> str:
         result = _run(session_project, "run", "--agent", agent, prompt)
@@ -259,8 +259,8 @@ def test_agents_cannot_edit_drafts(session_project, agent_run, agent):
 
 
 @pytest.mark.agents
-def test_nfh_tool_permission_names_work(agent_run):
-    """The allow rules name tools as nfh_<tool>; this proves OpenCode agrees."""
+def test_rai_tool_permission_names_work(agent_run):
+    """The allow rules name tools as rai_<tool>; this proves OpenCode agrees."""
     out = agent_run(
         "assistant",
         "Call the read_card tool with cite_key 'no-such-source' and repeat its "
@@ -269,19 +269,19 @@ def test_nfh_tool_permission_names_work(agent_run):
     assert "No card yet" in out, out[-2000:]
 
 
-def test_project_files_match_nfh_settings(live_project):
-    """opencode.jsonc, the agents' models and the git hook follow nfh's settings."""
-    from nfh.render import sync_project
+def test_project_files_match_rai_settings(live_project):
+    """opencode.jsonc, the agents' models and the git hook follow rai's settings."""
+    from rai.render import sync_project
 
     if live_project is None:
         pytest.skip("pass --live-project to check a real project")
     drift = sync_project(live_project, check=True).drift
-    assert not drift, f"out of date: {', '.join(drift)}; run `nfh sync`"
+    assert not drift, f"out of date: {', '.join(drift)}; run `rai sync`"
 
 
 @pytest.mark.agents
-def test_the_briefing_is_loaded_from_nfh_into_the_session(session_project, agent_run):
-    """opencode.jsonc loads .nfh/brief.md as an instruction; .nfh is not tracked by
+def test_the_briefing_is_loaded_from_rai_into_the_session(session_project, agent_run):
+    """opencode.jsonc loads .rai/brief.md as an instruction; .rai is not tracked by
     git, so this confirms OpenCode reads it anyway."""
     marker = "PINEAPPLE-7"
     session_project.brief_path.write_text(
@@ -297,7 +297,7 @@ def test_the_briefing_is_loaded_from_nfh_into_the_session(session_project, agent
 
 @pytest.mark.agents
 def test_sparring_records_an_objection_and_its_dismissal(session_project, agent_run):
-    from nfh import ledger
+    from rai import ledger
 
     (session_project.drafts_dir / "ledger-check.md").write_text("# T\n\nClaims all.\n")
     agent_run(
@@ -319,7 +319,7 @@ def test_sparring_records_an_objection_and_its_dismissal(session_project, agent_
 def test_the_assistant_records_a_session_summary_for_the_next_conversation(
     session_project, agent_run
 ):
-    from nfh import ledger
+    from rai import ledger
 
     agent_run(
         "assistant",

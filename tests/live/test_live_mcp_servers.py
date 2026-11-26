@@ -12,14 +12,14 @@ import yaml
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-from nfh import jsonc
+from rai import jsonc
 
 pytestmark = pytest.mark.live
 
 
 def code_defined_tools(project) -> set[str]:
-    """The tools nfh's server defines, read from the code rather than a second list."""
-    from nfh.server import make_server
+    """The tools rai's server defines, read from the code rather than a second list."""
+    from rai.server import make_server
 
     return {t.name for t in anyio.run(make_server(project).list_tools)}
 
@@ -49,11 +49,11 @@ def _tools(project, name: str, call: tuple[str, dict] | None = None):
     return anyio.run(run)
 
 
-def test_nfh_server(scratch_project):
-    names, reply = _tools(scratch_project, "nfh", ("read_card", {"cite_key": "x"}))
+def test_rai_server(scratch_project):
+    names, reply = _tools(scratch_project, "rai", ("read_card", {"cite_key": "x"}))
     assert names == code_defined_tools(scratch_project), (
         "the server started by opencode.jsonc exposes different tools than the code "
-        "defines; is the project pointing at another copy of nfh?"
+        "defines; is the project pointing at another copy of rai?"
     )
     assert "No card yet" in reply
 
@@ -104,7 +104,7 @@ def test_zotero_server_and_agents_get_read_tools_only(scratch_project):
     names, _ = _tools(scratch_project, "zotero")
     assert names, "zotero-mcp started but exposes no tools"
     assert "zotero_semantic_search" not in names, (
-        "the template installs zotero-mcp without its [semantic] extra; nfh's "
+        "the template installs zotero-mcp without its [semantic] extra; rai's "
         "search_passages is the project's passage search. If you enable Zotero "
         "semantic search on purpose, grant it and update the agents' guidance."
     )
@@ -123,9 +123,9 @@ def test_only_the_unified_paper_search_is_granted(scratch_project):
     assert not allowed["reader"]
 
 
-def test_every_nfh_allow_rule_matches_a_real_tool(scratch_project):
+def test_every_rai_allow_rule_matches_a_real_tool(scratch_project):
     tools = code_defined_tools(scratch_project)
-    allowed = _allowed(scratch_project, "nfh", tools)
+    allowed = _allowed(scratch_project, "rai", tools)
     assert allowed["assistant"] >= {"search_passages", "read_location", "verify_quote"}
     assert allowed["assistant"] >= {
         "read_candidate",

@@ -10,7 +10,7 @@ from importlib.metadata import distributions
 
 import pytest
 
-from nfh.config import HARNESS_ROOT, MODEL_CACHE, ollama_host
+from rai.config import HARNESS_ROOT, MODEL_CACHE, ollama_host
 
 pytestmark = pytest.mark.live
 
@@ -40,7 +40,7 @@ def test_docling_models_are_cached_inside_the_harness(tmp_path):
 
     import pymupdf
 
-    from nfh.extract import extract
+    from rai.extract import extract
 
     assert os.environ.get("HF_HOME") == str(MODEL_CACHE), (
         "HF_HOME is set elsewhere in your shell; Docling's models will be cached "

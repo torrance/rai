@@ -6,9 +6,9 @@ import subprocess
 import pytest
 from typer.testing import CliRunner
 
-from nfh import ledger
-from nfh.cli import app
-from nfh.notes import read_notes
+from rai import ledger
+from rai.cli import app
+from rai.notes import read_notes
 
 runner = CliRunner()
 
@@ -143,7 +143,7 @@ def test_read_notes_views(project):
     assert "No claims yet" in read_notes(project, "claims")
 
 
-def test_nfh_show_prints_the_internal_notes(project):
+def test_rai_show_prints_the_internal_notes(project):
     ledger.record_decision(project, "Keep the Weber comparison")
     result = runner.invoke(app, ["--project", str(project.root), "show", "decisions"])
     assert result.exit_code == 0 and "D1" in result.output
@@ -153,13 +153,13 @@ def test_nfh_show_prints_the_internal_notes(project):
 
 # git ----------------------------------------------------------------------------
 @pytest.mark.skipif(not shutil.which("git"), reason="git missing")
-def test_git_tracks_the_ledger_and_nothing_else_in_nfh(tmp_path):
+def test_git_tracks_the_ledger_and_nothing_else_in_rai(tmp_path):
     root = tmp_path / "p"
     assert runner.invoke(app, ["new", "p", "--path", str(root)]).exit_code == 0
-    (root / ".nfh" / "ledger").mkdir(parents=True, exist_ok=True)
-    (root / ".nfh" / "ledger" / "decisions.jsonl").write_text("{}\n")
-    (root / ".nfh" / "library.db").write_text("x")
-    (root / ".nfh" / "brief.md").write_text("x")
+    (root / ".rai" / "ledger").mkdir(parents=True, exist_ok=True)
+    (root / ".rai" / "ledger" / "decisions.jsonl").write_text("{}\n")
+    (root / ".rai" / "library.db").write_text("x")
+    (root / ".rai" / "brief.md").write_text("x")
 
     def ignored(path):
         return (
@@ -169,8 +169,8 @@ def test_git_tracks_the_ledger_and_nothing_else_in_nfh(tmp_path):
             == 0
         )
 
-    assert ignored(".nfh/library.db") and ignored(".nfh/brief.md")
-    assert not ignored(".nfh/ledger/decisions.jsonl")
+    assert ignored(".rai/library.db") and ignored(".rai/brief.md")
+    assert not ignored(".rai/ledger/decisions.jsonl")
 
 
 # Session summaries ---------------------------------------------------------------
@@ -230,7 +230,7 @@ def test_sessions_view_says_so_when_there_are_none(project):
 
 
 def test_the_briefing_says_where_we_left_off(project):
-    from nfh.brief import build_brief
+    from rai.brief import build_brief
 
     assert "Where we left off" not in build_brief(project)
     summary(project)
@@ -250,7 +250,7 @@ def test_the_briefing_says_where_we_left_off(project):
 
 
 def test_the_briefing_includes_all_active_decisions(project):
-    from nfh.brief import build_brief
+    from rai.brief import build_brief
 
     ledger.record_decision(project, "Keep the Weber comparison", "ch. 3")
     ledger.record_decision(project, "Drop the survey")
@@ -265,8 +265,8 @@ def test_the_briefing_includes_all_active_decisions(project):
 
 
 def test_many_long_decisions_stay_within_the_briefing_budget(project):
-    from nfh.brief import BUDGET_TOKENS, build_brief
-    from nfh.config import estimate_tokens
+    from rai.brief import BUDGET_TOKENS, build_brief
+    from rai.config import estimate_tokens
 
     for n in range(30):
         ledger.record_decision(project, f"Decision {n} " + "word " * 300)
@@ -276,8 +276,8 @@ def test_many_long_decisions_stay_within_the_briefing_budget(project):
 
 
 def test_a_very_long_summary_is_clipped_in_the_briefing(project):
-    from nfh.brief import BUDGET_TOKENS, build_brief
-    from nfh.config import estimate_tokens
+    from rai.brief import BUDGET_TOKENS, build_brief
+    from rai.config import estimate_tokens
 
     summary(project, left_off="word " * 2000, understandings=["long " * 500] * 9)
     text = build_brief(project)
@@ -286,8 +286,8 @@ def test_a_very_long_summary_is_clipped_in_the_briefing(project):
 
 
 def test_a_very_long_thesis_is_clipped_in_the_briefing(project):
-    from nfh.brief import BUDGET_TOKENS, build_brief
-    from nfh.config import estimate_tokens
+    from rai.brief import BUDGET_TOKENS, build_brief
+    from rai.config import estimate_tokens
 
     draft(project)
     project.project_md.write_text("# T\n\n## Thesis\n" + "word " * 2000 + "\n")
@@ -297,7 +297,7 @@ def test_a_very_long_thesis_is_clipped_in_the_briefing(project):
     assert "drafts/ch1.md" in text
 
 
-def test_nfh_show_sessions(project):
+def test_rai_show_sessions(project):
     summary(project)
     out = runner.invoke(
         app, ["--project", str(project.root), "show", "sessions"]

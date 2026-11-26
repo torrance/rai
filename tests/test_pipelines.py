@@ -5,13 +5,13 @@ import shutil
 
 import pytest
 
-from nfh import cards, corpus_map, manuscript
-from nfh.brief import build_brief
-from nfh.check import check_quotes
-from nfh.claims import update_claim
-from nfh.ingest import ingest_local
-from nfh.status import compute
-from nfh.store import Store
+from rai import cards, corpus_map, manuscript
+from rai.brief import build_brief
+from rai.check import check_quotes
+from rai.claims import update_claim
+from rai.ingest import ingest_local
+from rai.status import compute
+from rai.store import Store
 
 from .conftest import SAMPLE
 
@@ -177,7 +177,7 @@ def test_card_drops_bad_locations_and_quotes(project, scripted):
     assert "made up" not in unit
     note = cards.project_note_path(project, "writer2024").read_text()
     assert "central" in note
-    from nfh import ledger
+    from rai import ledger
 
     ledger.set_reading_status(project, "writer2024", "read", "chapter 2 only")
     shown = cards.read_card(project, "writer2024")
@@ -305,7 +305,7 @@ def test_interlocutors_section_is_available_for_large_libraries():
 
 
 def test_quote_patterns_handle_internal_quotes_and_multi_citations():
-    from nfh.check import CARD_QUOTE, NOTE_QUOTE
+    from rai.check import CARD_QUOTE, NOTE_QUOTE
 
     line = (
         '- para 3: key line Why it matters: thesis. Quote: '
@@ -387,7 +387,7 @@ def test_open_questions_keeps_sub_bullets_and_stops_at_prose(project):
 
 
 def search_card_hit(store):
-    from nfh.search import search
+    from rai.search import search
 
     return search(store, "less flexible than claimed", kind="card", limit=1)
 

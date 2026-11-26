@@ -6,7 +6,7 @@ from collections import Counter
 
 import pytest
 
-from nfh.zotero import Zotero
+from rai.zotero import Zotero
 
 from .conftest import advise
 
@@ -31,13 +31,13 @@ def scoped_items(zotero, live_project):
         pytest.skip("pass --live-project to check a real project's Zotero scope")
     z = live_project.zotero
     if not z.collection and not z.tags:
-        pytest.fail("the project's nfh.toml has no [zotero] collection or tags")
+        pytest.fail("the project's rai.toml has no [zotero] collection or tags")
     return zotero.items(collection=z.collection, tags=z.tags, tag_match=z.tag_match)
 
 
 def test_storage_folder_exists(project):
     assert project.zotero.storage_dir.exists(), (
-        f"{project.zotero.storage_dir} not found; set [zotero] data_dir in nfh.toml"
+        f"{project.zotero.storage_dir} not found; set [zotero] data_dir in rai.toml"
     )
 
 
@@ -66,7 +66,7 @@ def test_citation_keys_are_in_zotero_and_unique(scoped_items):
     if by_source["generated"]:
         missing = [i.cite_key for i in scoped_items if i.key_source == "generated"]
         advise(
-            f"{len(missing)} item(s) have no citation key in Zotero, so nfh made "
+            f"{len(missing)} item(s) have no citation key in Zotero, so rai made "
             f"temporary ones ({', '.join(missing)}). Install Better BibTeX, select "
             "them, and choose Better BibTeX > Refresh BibTeX key."
         )

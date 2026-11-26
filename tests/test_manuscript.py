@@ -2,7 +2,7 @@ import shutil
 
 import pytest
 
-from nfh.manuscript import chapter_id, parse_draft
+from rai.manuscript import chapter_id, parse_draft
 
 needs_pandoc = pytest.mark.skipif(not shutil.which("pandoc"), reason="pandoc missing")
 

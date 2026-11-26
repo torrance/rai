@@ -10,8 +10,8 @@ import httpx
 import pytest
 from typer.testing import CliRunner
 
-from nfh.cli import app
-from nfh.config import (
+from rai.cli import app
+from rai.config import (
     MODEL_STAGES,
     Project,
     load_env,
@@ -19,7 +19,7 @@ from nfh.config import (
     ollama_host,
     parse_ref,
 )
-from nfh.render import sync_project
+from rai.render import sync_project
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -41,8 +41,8 @@ def scratch_project(tmp_path_factory, live_project) -> Project:
     result = CliRunner().invoke(app, args)
     assert result.exit_code == 0, result.output
     if live_project is not None:
-        (root / "nfh.toml").write_text(
-            (live_project.root / "nfh.toml").read_text(encoding="utf-8")
+        (root / "rai.toml").write_text(
+            (live_project.root / "rai.toml").read_text(encoding="utf-8")
         )
     project = load_project(root)
     sync_project(project)
@@ -70,7 +70,7 @@ def ollama(project):
     except httpx.HTTPError as exc:
         pytest.fail(
             f"Ollama isn't reachable at {ollama_host(project)}: {exc}. Check the "
-            "port forward and [ollama] host (`nfh config` shows what is in force)."
+            "port forward and [ollama] host (`rai config` shows what is in force)."
         )
     return client
 

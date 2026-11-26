@@ -1,7 +1,7 @@
 [project]
-name = "nfh"
+name = "rai"
 version = "0.1.0"
-description = "A local, Ollama-backed harness for non-fiction research and writing"
+description = "Research AI: a local harness for non-fiction research and writing"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -26,7 +26,7 @@ dependencies = [
 ]
 
 [project.scripts]
-nfh = "nfh.cli:app"
+rai = "rai.cli:app"
 
 [dependency-groups]
 dev = [
@@ -48,7 +48,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/nfh"]
+packages = ["src/rai"]
 
 [tool.ruff]
 line-length = 88

@@ -3,18 +3,18 @@ import json
 import numpy as np
 import pytest
 
-from nfh import ledger
-from nfh.ingest import ingest_local, reembed
-from nfh.notes import read_notes
-from nfh.search import (
+from rai import ledger
+from rai.ingest import ingest_local, reembed
+from rai.notes import read_notes
+from rai.search import (
     read_location,
     resolve_location,
     resolve_location_parts,
     search,
 )
-from nfh.status import embedding_problem
-from nfh.store import Store
-from nfh.verify import verify_quote
+from rai.status import embedding_problem
+from rai.store import Store
+from rai.verify import verify_quote
 
 from .conftest import SAMPLE, fake_vectors
 
@@ -39,7 +39,7 @@ def test_reembed_can_change_provider_and_dimensions(project, fake_ollama, monkey
     project.models.embedding = "opencode-go/e"
     project.models.embedding_dims = 8
     monkeypatch.setattr(
-        "nfh.ingest.embed_texts",
+        "rai.ingest.embed_texts",
         lambda p, texts: np.zeros((len(texts), 8), dtype=np.float32),
     )
     assert reembed(project) > 0
@@ -270,7 +270,7 @@ def test_status_reports_an_embedding_mismatch(project, fake_ollama):
 
 
 def test_source_filter_uses_exact_vector_search(project, fake_ollama, monkeypatch):
-    monkeypatch.setattr("nfh.search.CANDIDATES", 1)
+    monkeypatch.setattr("rai.search.CANDIDATES", 1)
     store = Store(project)
     if not store.has_vec:
         pytest.skip("sqlite-vec is not available")
@@ -378,7 +378,7 @@ def test_page_locations_handle_roman_cover_and_missing_end_pages(project):
 
 
 def test_discontinuous_page_locations_do_not_bridge(project):
-    from nfh.cards import _location_ok
+    from rai.cards import _location_ok
 
     store = Store(project)
     cur = store.conn.execute(
@@ -413,7 +413,7 @@ def test_removed_local_file_leaves_index(project, fake_ollama):
 
 
 def test_removed_source_cleans_up_cards_notes_and_index(project, fake_ollama):
-    from nfh.cards import card_path, project_note_path, write_with_frontmatter
+    from rai.cards import card_path, project_note_path, write_with_frontmatter
 
     _ingest(project)
     card = card_path(project, "writer2024")
@@ -436,7 +436,7 @@ def test_removed_source_cleans_up_cards_notes_and_index(project, fake_ollama):
 
 
 def test_content_change_with_a_new_key_moves_the_card(project, fake_ollama):
-    from nfh.cards import card_path, project_note_path, write_with_frontmatter
+    from rai.cards import card_path, project_note_path, write_with_frontmatter
 
     _ingest(project)
     old_card = card_path(project, "writer2024")
@@ -461,11 +461,11 @@ def test_content_change_with_a_new_key_moves_the_card(project, fake_ollama):
 
 
 def test_key_change_in_zotero_moves_card_and_note(project, fake_ollama):
-    from nfh.cards import card_path, project_note_path, write_with_frontmatter
-    from nfh.status import compute
+    from rai.cards import card_path, project_note_path, write_with_frontmatter
+    from rai.status import compute
 
     _ingest(project)
-    from nfh import ledger
+    from rai import ledger
 
     ledger.set_reading_status(project, "writer2024", "read")
     write_with_frontmatter(
@@ -485,7 +485,7 @@ def test_key_change_in_zotero_moves_card_and_note(project, fake_ollama):
     assert not card_path(project, "writer2024").exists()
     note = project_note_path(project, "writer2024riders").read_text()
     assert "cite_key: writer2024riders" in note
-    from nfh import ledger
+    from rai import ledger
 
     assert ledger.reading_statuses(project)["writer2024riders"]["status"] == "read"
     assert "writer2024" not in ledger.reading_statuses(project)
