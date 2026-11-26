@@ -11,6 +11,7 @@ import difflib
 import hashlib
 import json
 import re
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -447,10 +448,12 @@ def build_card(
             f"Unit {n + 1} of {len(units)}: {unit['title']} ({unit['loc_label']})\n\n"
             f"{marked_text(unit['blocks'])}"
         )
+        started = time.monotonic()
         output = chat_json(
             project, system_unit, user, UNIT_SCHEMA, think=True, stage="reading"
         )
         output, ok, dropped = check_unit(store, source["id"], unit, output)
+        elapsed = time.monotonic() - started
         checked += ok
         dropped_total += dropped
         output["_unit"] = {"title": unit["title"], "loc": unit["loc_label"]}
@@ -470,6 +473,10 @@ def build_card(
             ),
         )
         store.conn.commit()
+        say(
+            f"    {ok} locations verified, {dropped} dropped "
+            f"({elapsed:.1f}s)"
+        )
     store.conn.execute(
         "DELETE FROM units WHERE source_id=? AND unit_no>=?", (source["id"], len(units))
     )

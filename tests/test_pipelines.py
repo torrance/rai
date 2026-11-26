@@ -153,11 +153,20 @@ def test_card_drops_bad_locations_and_quotes(project, scripted):
     ingest_local(project, say=lambda _: None)
     store = Store(project)
     source = store.source("writer2024")
-    path = cards.build_card(project, store, source, say=lambda _: None)
+    messages: list[str] = []
+    path = cards.build_card(
+        project, store, source, say=messages.append
+    )
     text = path.read_text()
     assert "Platform work is less flexible" in text
     assert "this sentence is not in the source at all" not in text
     assert "impossible location in the combine step" not in text
+    assert any(
+        "locations verified" in message
+        and "dropped" in message
+        and message.rstrip().endswith("s)")
+        for message in messages
+    )
     unit = store.conn.execute("SELECT output_json FROM units").fetchone()[0]
     assert "Bogus" not in unit and "not in the source at all" not in unit
     note = cards.project_note_path(project, "writer2024").read_text()
