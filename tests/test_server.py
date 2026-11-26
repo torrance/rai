@@ -83,6 +83,12 @@ def test_refresh_chapter_rejects_paths_outside_drafts(project):
         assert "not a draft file" in str(result)
 
 
+def test_search_passages_reports_unknown_sources(project):
+    server = make_server(project)
+    result = call(server, "search_passages", query="x", sources=["missing"])
+    assert "No source matches" in str(result)
+
+
 def test_set_reading_status_checks_the_source_exists(project):
     server = make_server(project)
     call(server, "set_reading_status", cite_key="nobody", status="read")

@@ -101,6 +101,34 @@ def test_search_read_and_verify(project, fake_ollama):
     store.close()
 
 
+def test_search_can_be_restricted_and_balanced_across_sources(project, fake_ollama):
+    _ingest(project)
+    (project.sources_local_dir / "other.md").write_text(
+        "# Other work\n\nPlatform labour is debated. Managers use dashboards, "
+        "and workers organise around scheduling and pay.\n"
+    )
+    (project.sources_local_dir / "other.md.yaml").write_text(
+        "title: Other work\nauthors: [B. Writer]\nyear: 2023\n"
+        "cite_key: other2023\n"
+    )
+    ingest_local(project, say=lambda _: None)
+    store = Store(project)
+
+    one = search(store, "platform", sources=["writer2024"], limit=10)
+    assert one and {hit["cite_key"] for hit in one} == {"writer2024"}
+    other = search(store, "platform", sources=["other2023"], limit=10)
+    assert other and {hit["cite_key"] for hit in other} == {"other2023"}
+
+    balanced = search(store, "platform", limit=10, per_source_limit=1)
+    keys = [hit["cite_key"] for hit in balanced]
+    assert len(keys) == len(set(keys))
+    assert set(keys) <= {"writer2024", "other2023"}
+
+    with pytest.raises(ValueError, match="No source matches"):
+        search(store, "platform", sources=["missing"])
+    store.close()
+
+
 def test_store_sets_a_busy_timeout(project):
     store = Store(project)
     assert store.conn.execute("PRAGMA busy_timeout").fetchone()[0] == 30000

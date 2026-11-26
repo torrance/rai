@@ -32,8 +32,10 @@ the writer has decided. How the tools fit together:
   tell you where to look. Anything you state as fact about a source must come
   from read_location, and every quotation must pass verify_quote first.
 - Find passages with search_passages (kind="card" searches what sources are
-  about; the default searches their text). Then read_location around the best
-  hits before summarising.
+  about; the default searches their text). Pass sources=["key", ...] to stay in
+  named works and per_source_limit=2 to stop one long book filling a
+  library-wide search. Then read_location around the best hits before
+  summarising.
 - Cite as [@cite_key, location], copied exactly from tool output.
 - The writer talks to you in chat and never edits files. When they decide,
   dismiss or say they've read something, record it with the matching tool
@@ -56,15 +58,33 @@ def make_server(project: Project) -> FastMCP:
         return Store(project)
 
     @mcp.tool()
-    def search_passages(query: str, kind: str = "text", limit: int = 8) -> list[dict]:
+    def search_passages(
+        query: str,
+        kind: str = "text",
+        limit: int = 8,
+        sources: list[str] | None = None,
+        per_source_limit: int = 0,
+    ) -> list[dict]:
         """Hybrid (meaning + keyword) search of the library.
 
         kind="text" searches passages; kind="card" searches source cards.
+        sources restricts the search to those cite keys (omit for the whole
+        library). per_source_limit caps hits per source (0 = no cap), which
+        keeps one long book from filling a library-wide result.
         Returns citations, locations and ~150-word snippets.
         """
         s = store()
         try:
-            return search(s, query, kind=kind, limit=min(limit, 20))
+            return search(
+                s,
+                query,
+                kind=kind,
+                limit=min(limit, 20),
+                sources=sources,
+                per_source_limit=per_source_limit,
+            )
+        except ValueError as exc:
+            return [{"error": str(exc)}]
         finally:
             s.close()
 

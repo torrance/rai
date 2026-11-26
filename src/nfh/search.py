@@ -21,55 +21,119 @@ def _fts_query(query: str) -> str:
     return " OR ".join(f'"{t}"' for t in terms)
 
 
-def _vector_hits(store: Store, qvec: np.ndarray, kind: str) -> list[int]:
+def _vector_hits(
+    store: Store,
+    qvec: np.ndarray,
+    kind: str,
+    source_ids: list[int] | None = None,
+    pool: int = CANDIDATES,
+) -> list[int]:
     blob = np.asarray(qvec, dtype=np.float32).tobytes()
+    clause, source_args = _source_clause(source_ids)
     if store.has_vec:
         rows = store.conn.execute(
             "SELECT v.rowid AS id FROM chunks_vec v JOIN chunks c ON c.id = v.rowid "
-            "WHERE v.embedding MATCH ? AND k = ? AND c.kind = ? ORDER BY v.distance",
-            (blob, CANDIDATES * 4, kind),
+            "WHERE v.embedding MATCH ? AND k = ? AND c.kind = ?"
+            + clause
+            + " ORDER BY v.distance",
+            (blob, pool * 4, kind, *source_args),
         ).fetchall()
-        return [r["id"] for r in rows][:CANDIDATES]
+        return [r["id"] for r in rows][:pool]
     rows = store.conn.execute(
-        "SELECT id, embedding FROM chunks WHERE kind=?", (kind,)
+        "SELECT c.id, c.embedding FROM chunks c WHERE c.kind = ?" + clause,
+        (kind, *source_args),
     ).fetchall()
     if not rows:
         return []
     matrix = np.stack([np.frombuffer(r["embedding"], dtype=np.float32) for r in rows])
-    order = np.argsort(-(matrix @ qvec))[:CANDIDATES]
+    order = np.argsort(-(matrix @ qvec))[:pool]
     return [rows[i]["id"] for i in order]
 
 
-def _keyword_hits(store: Store, query: str, kind: str) -> list[int]:
+def _keyword_hits(
+    store: Store,
+    query: str,
+    kind: str,
+    source_ids: list[int] | None = None,
+    pool: int = CANDIDATES,
+) -> list[int]:
     match = _fts_query(query)
     if not match:
         return []
+    clause, source_args = _source_clause(source_ids)
     rows = store.conn.execute(
         "SELECT f.rowid AS id FROM chunks_fts f JOIN chunks c ON c.id = f.rowid "
-        "WHERE chunks_fts MATCH ? AND c.kind = ? ORDER BY bm25(chunks_fts) LIMIT ?",
-        (match, kind, CANDIDATES),
+        "WHERE chunks_fts MATCH ? AND c.kind = ?"
+        + clause
+        + " ORDER BY bm25(chunks_fts) LIMIT ?",
+        (match, kind, *source_args, pool),
     ).fetchall()
     return [r["id"] for r in rows]
 
 
+def _source_clause(source_ids: list[int] | None) -> tuple[str, list[int]]:
+    if not source_ids:
+        return "", []
+    marks = ", ".join("?" for _ in source_ids)
+    return f" AND c.source_id IN ({marks})", list(source_ids)
+
+
+def _resolve_sources(
+    store: Store, sources: list[str] | tuple[str, ...] | None
+) -> list[int]:
+    if not sources:
+        return []
+    ids: list[int] = []
+    missing: list[str] = []
+    for ref in sources:
+        source = store.source(ref)
+        if source is None:
+            missing.append(str(ref))
+        elif source["id"] not in ids:
+            ids.append(source["id"])
+    if missing:
+        joined = ", ".join(repr(ref) for ref in missing)
+        raise ValueError(f"No source matches {joined}.")
+    return ids
+
+
 def search(
-    store: Store, query: str, kind: str = "text", limit: int = 8
+    store: Store,
+    query: str,
+    kind: str = "text",
+    limit: int = 8,
+    sources: list[str] | tuple[str, ...] | None = None,
+    per_source_limit: int = 0,
 ) -> list[dict[str, Any]]:
+    """Hybrid search, optionally inside named sources and balanced across sources."""
     store.check_embedding_model(
         store.project.models.embedding,
         store.project.models.embedding_dims,
         store.project.models.document_template,
     )
+    source_ids = _resolve_sources(store, sources)
+    per_source_limit = max(0, per_source_limit)
+    pool = max(CANDIDATES, limit * 10) if per_source_limit else CANDIDATES
     scores: dict[int, float] = {}
     qvec = embed_query(store.project, query)
-    for hits in (_vector_hits(store, qvec, kind), _keyword_hits(store, query, kind)):
+    for hits in (
+        _vector_hits(store, qvec, kind, source_ids, pool),
+        _keyword_hits(store, query, kind, source_ids, pool),
+    ):
         for rank, cid in enumerate(hits):
             scores[cid] = scores.get(cid, 0.0) + 1.0 / (RRF_K + rank + 1)
-    ranked = sorted(scores, key=scores.get, reverse=True)[:limit]
+    ranked = sorted(scores, key=scores.get, reverse=True)
     results = []
+    per_source: dict[int, int] = {}
     for cid in ranked:
         chunk = store.conn.execute("SELECT * FROM chunks WHERE id=?", (cid,)).fetchone()
-        source = store.source(chunk["source_id"])
+        source_id = chunk["source_id"]
+        if (
+            per_source_limit
+            and per_source.get(source_id, 0) >= per_source_limit
+        ):
+            continue
+        source = store.source(source_id)
         words = chunk["text"].split()
         snippet = " ".join(words[:150]) + (" ..." if len(words) > 150 else "")
         results.append(
@@ -86,6 +150,9 @@ def search(
                 "snippet": snippet,
             }
         )
+        per_source[source_id] = per_source.get(source_id, 0) + 1
+        if len(results) >= limit:
+            break
     return results
 
 
