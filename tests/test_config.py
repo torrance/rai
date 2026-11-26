@@ -214,14 +214,21 @@ def test_embedding_templates_wrap_queries_and_documents(project, monkeypatch):
 def test_index_refuses_a_changed_embedding_setup(project):
     store = Store(project)
     store.check_embedding_model("ollama/m", 1024, "{text}")
-    store.check_embedding_model("ollama/m", 1024, "{text}")
+    # No chunks yet: changing the setup is safe and just records the new one.
+    store.check_embedding_model("ollama/m", 1024, "search_document: {text}")
+    store.conn.execute(
+        "INSERT INTO chunks(source_id, kind, embedding) VALUES(NULL, 'text', ?)",
+        (np.zeros(1024, dtype=np.float32).tobytes(),),
+    )
+    store.conn.commit()
+    store.check_embedding_model("ollama/m", 1024, "search_document: {text}")
     with pytest.raises(RuntimeError, match="--reembed"):
-        store.check_embedding_model("ollama/m", 1024, "search_document: {text}")
+        store.check_embedding_model("ollama/m", 1024, "{text}")
     with pytest.raises(RuntimeError, match="--reembed"):
-        store.check_embedding_model("opencode-go/m", 1024, "{text}")
+        store.check_embedding_model("opencode-go/m", 1024, "search_document: {text}")
     # An index from before the provider was recorded still counts as Ollama.
     store.conn.execute("DELETE FROM meta WHERE key='embed_ref'")
-    store.check_embedding_model("ollama/m", 1024, "{text}")
+    store.check_embedding_model("ollama/m", 1024, "search_document: {text}")
     assert store.get_meta("embed_ref") == "ollama/m"
     store.close()
 

@@ -207,6 +207,29 @@ def test_read_notes_sources_inventory(project, fake_ollama):
     assert "| read | 2 |" in text
 
 
+def test_embedding_status_on_empty_index_is_read_only(project):
+    store = Store(project)
+    assert (
+        store.embedding_mismatch(
+            project.models.embedding,
+            project.models.embedding_dims,
+            project.models.document_template,
+        )
+        == ""
+    )
+    assert store.get_meta("embed_ref") is None
+    store.close()
+
+
+def test_embedding_settings_can_change_before_ingest(project):
+    store = Store(project)
+    store.check_embedding_model(
+        project.models.embedding, project.models.embedding_dims
+    )
+    store.check_embedding_model(project.models.embedding, 8)
+    store.close()
+
+
 def test_status_reports_an_embedding_mismatch(project, fake_ollama):
     _ingest(project)
     project.models.embedding_dims = 8

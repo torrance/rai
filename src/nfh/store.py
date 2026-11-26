@@ -154,18 +154,19 @@ class Store:
         self.set_meta("embed_doc_template", doc_template)
         self.conn.commit()
 
-    def check_embedding_model(
+    def embedding_mismatch(
         self, ref: str, dims: int, doc_template: str = "{text}"
-    ) -> None:
-        """Refuse to mix vectors made with different embedding setups."""
+    ) -> str:
+        """Return a description of an embedding mismatch, without changing meta."""
         parsed = parse_ref(ref, field="[models] embedding")
+        if self.conn.execute("SELECT 1 FROM chunks LIMIT 1").fetchone() is None:
+            return ""
         stored_ref = self.get_meta("embed_ref")
         stored_model = self.get_meta("embed_model")
         stored_dims = self.get_meta("embed_dims")
         stored_template = self.get_meta("embed_doc_template")
-        if stored_model is None and stored_ref is None:
-            self._set_embedding_meta(str(parsed), dims, doc_template)
-            return
+        if stored_ref is None and stored_model is None:
+            return ""
         if stored_template is None:
             stored_template = "{text}"  # indexes built before this was configurable
         if stored_ref is None:
@@ -185,14 +186,27 @@ class Store:
                 and stored_template == doc_template
             )
             stored_label = stored_ref
-        if not matches:
-            raise RuntimeError(
-                f"Index was built with {stored_label} ({stored_dims} dims, document "
-                f"template {stored_template!r}) but the settings now say {parsed} "
-                f"({dims} dims, {doc_template!r}). "
-                "Run `nfh ingest --reembed` to rebuild the vectors."
-            )
-        if stored_ref is None:  # upgrade the metadata in place
+        if matches:
+            return ""
+        return (
+            f"Index was built with {stored_label} ({stored_dims} dims, document "
+            f"template {stored_template!r}) but the settings now say {parsed} "
+            f"({dims} dims, {doc_template!r}). "
+            "Run `nfh ingest --reembed` to rebuild the vectors."
+        )
+
+    def check_embedding_model(
+        self, ref: str, dims: int, doc_template: str = "{text}"
+    ) -> None:
+        """Refuse to mix vectors made with different embedding setups."""
+        parsed = parse_ref(ref, field="[models] embedding")
+        if self.conn.execute("SELECT 1 FROM chunks LIMIT 1").fetchone() is None:
+            self._set_embedding_meta(str(parsed), dims, doc_template)
+            return
+        problem = self.embedding_mismatch(ref, dims, doc_template)
+        if problem:
+            raise RuntimeError(problem)
+        if self.get_meta("embed_ref") is None:  # upgrade the metadata in place
             self._set_embedding_meta(str(parsed), dims, doc_template)
 
     # Sources -----------------------------------------------------------------
