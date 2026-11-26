@@ -88,7 +88,12 @@ def fake_project(tmp_path_factory):
     assert runner.invoke(app, ["new", "p", "--path", str(root)]).exit_code == 0
     toml = root / "nfh.toml"
     toml.write_text(
-        toml.read_text() + f'\n[ollama]\nhost = "http://127.0.0.1:{port}"\n'
+        toml.read_text()
+        + f'\n[ollama]\nhost = "http://127.0.0.1:{port}"\n'
+        + '\n[models]\nreading = "ollama/fake-model"\n'
+        + 'summarising = "ollama/fake-model"\n'
+        + 'research = "ollama/fake-model"\n'
+        + 'sparring = "ollama/fake-model"\n'
     )
     assert runner.invoke(app, ["--project", str(root), "sync"]).exit_code == 0
     project = load_project(root)

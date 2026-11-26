@@ -1,7 +1,7 @@
 ---
 description: "Deep-reads a long source or several draft files and reports back briefly"
 mode: subagent
-model: "{{OC_MODEL}}"
+model: "{{OC_MODEL_READER}}"
 permissions:
   - { action: nfh_read_location, resource: "*", effect: allow }
   - { action: nfh_read_card, resource: "*", effect: allow }

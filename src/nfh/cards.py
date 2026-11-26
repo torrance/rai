@@ -19,7 +19,7 @@ import yaml
 
 from . import ledger
 from .chunk import embedding_text, make_units, marked_text
-from .config import PROMPT_VERSION, Project
+from .config import PROMPT_VERSION, Project, model_identity, same_model
 from .embed import embed_texts
 from .llm import chat_json, load_prompt
 from .search import resolve_location
@@ -144,6 +144,14 @@ FRONTMATTER = re.compile(r"^---\n(.*?)\n---\n?", re.DOTALL)
 
 def text_hash(text: str) -> str:
     return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+
+
+def card_model_signature(project: Project) -> str:
+    """Both stages that shape a card; a change in either makes it stale."""
+    return (
+        f"reading={model_identity(project.models.reading)} "
+        f"+ summarising={model_identity(project.models.summarising)}"
+    )
 
 
 def read_frontmatter(path: Path) -> tuple[dict[str, Any], str]:
@@ -280,6 +288,11 @@ def build_card(
     say: Callable[[str], None] = print,
     reuse_units: bool = True,
 ) -> Path:
+    store.check_embedding_model(
+        project.models.embedding,
+        project.models.embedding_dims,
+        project.models.document_template,
+    )
     blocks = store.blocks(source["id"])
     units = make_units(
         blocks,
@@ -298,7 +311,7 @@ def build_card(
             reuse_units
             and cached
             and cached["prompt_version"] == PROMPT_VERSION
-            and cached["model"] == project.models.chat
+            and same_model(cached["model"], project.models.reading)
             and cached["first_block"] == unit["first_block"]
             and cached["last_block"] == unit["last_block"]
         ):
@@ -313,7 +326,9 @@ def build_card(
             f"Unit {n + 1} of {len(units)}: {unit['title']} ({unit['loc_label']})\n\n"
             f"{marked_text(unit['blocks'])}"
         )
-        output = chat_json(project, system_unit, user, UNIT_SCHEMA, think=True)
+        output = chat_json(
+            project, system_unit, user, UNIT_SCHEMA, think=True, stage="reading"
+        )
         output, ok, dropped = check_unit(store, source["id"], unit, output)
         checked += ok
         dropped_total += dropped
@@ -330,7 +345,7 @@ def build_card(
                 unit["title"],
                 json.dumps(output),
                 PROMPT_VERSION,
-                project.models.chat,
+                model_identity(project.models.reading),
             ),
         )
         store.conn.commit()
@@ -346,6 +361,7 @@ def build_card(
         + json.dumps(outputs, ensure_ascii=False),
         COMBINE_SCHEMA,
         think=True,
+        stage="summarising",
     )
     body = render_card(source, combined)
     path = card_path(project, source["cite_key"])
@@ -360,7 +376,7 @@ def build_card(
         "year": source["year"],
         "kind": source["kind"],
         "source_hash": "sha256:" + (source["file_sha256"] or "")[:16],
-        "model": project.models.chat,
+        "model": card_model_signature(project),
         "prompt_version": PROMPT_VERSION,
         "generated": now()[:10],
         "checks": f"{checked} locations ok, {dropped_total} entries or quotes dropped",
@@ -370,7 +386,7 @@ def build_card(
         project.rel(path),
         "card",
         {"source": source["file_sha256"] or ""},
-        project.models.chat,
+        card_model_signature(project),
         PROMPT_VERSION,
     )
     _index_card(project, store, source, combined)
@@ -379,6 +395,11 @@ def build_card(
 
 
 def _index_card(project: Project, store: Store, source: Any, card: dict) -> None:
+    store.check_embedding_model(
+        project.models.embedding,
+        project.models.embedding_dims,
+        project.models.document_template,
+    )
     sections = [
         (
             "Thesis and structure",
@@ -433,6 +454,7 @@ def build_project_note(
             + f"\n\nSource card:\n{card_text}",
             RELEVANCE_SCHEMA,
             think=True,
+            stage="summarising",
         )
         lines = [f"## Relevance\n{rel.get('overall', '').strip()}\n"]
         for r in rel.get("relevance", []):
@@ -447,13 +469,14 @@ def build_project_note(
         "cite_key": source["cite_key"],
         "card_hash": text_hash(card_text),
         "questions_hash": text_hash(questions_text),
+        "model": model_identity(project.models.summarising),
     }
     write_with_frontmatter(path, meta, f"{relevance}\n\n## Cited in drafts\n{cited}")
     store.record_note(
         project.rel(path),
         "project_note",
         {"card": meta["card_hash"], "questions": meta["questions_hash"]},
-        project.models.chat,
+        model_identity(project.models.summarising),
         PROMPT_VERSION,
     )
     return path
@@ -481,6 +504,7 @@ def stale_sources(project: Project, store: Store) -> list[Any]:
         if (
             hashes.get("source") != (source["file_sha256"] or "")
             or note["prompt_version"] != PROMPT_VERSION
+            or note["model"] != card_model_signature(project)
         ):
             out.append(source)
     return out
@@ -495,8 +519,10 @@ def stale_project_notes(project: Project, store: Store) -> list[Any]:
             continue
         meta, _ = read_frontmatter(project_note_path(project, source["cite_key"]))
         card_hash = text_hash(card.read_text(encoding="utf-8"))
-        if meta.get("card_hash") != card_hash or meta.get("questions_hash") != (
-            questions_hash
+        if (
+            meta.get("card_hash") != card_hash
+            or meta.get("questions_hash") != questions_hash
+            or not same_model(meta.get("model"), project.models.summarising)
         ):
             out.append(source)
     return out

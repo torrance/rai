@@ -14,6 +14,8 @@ from nfh.cli import app
 from nfh.config import load_project
 
 DIMS = 1024
+TEST_CHAT_MODEL = "ollama/qwen3.8-flash-next:125b-a6b-q4_K_M"
+TEST_EMBED_MODEL = "ollama/qwen3-embedding:0.6b"
 
 
 def pytest_addoption(parser):
@@ -52,10 +54,20 @@ def fake_vectors(texts: list[str]) -> np.ndarray:
 
 @pytest.fixture(autouse=True)
 def _hermetic_config(request, monkeypatch, tmp_path):
-    """Fast tests see the built-in defaults, not your config.toml edits."""
+    """Fast tests use a local test profile, not the shipped Go defaults."""
     if "live" in request.keywords:
         return
-    monkeypatch.setattr("nfh.config.CONFIG_FILE", tmp_path / "absent-config.toml")
+    test_config = tmp_path / "test-config.toml"
+    test_config.write_text(
+        "[models]\n"
+        f'reading = "{TEST_CHAT_MODEL}"\n'
+        f'summarising = "{TEST_CHAT_MODEL}"\n'
+        f'research = "{TEST_CHAT_MODEL}"\n'
+        f'sparring = "{TEST_CHAT_MODEL}"\n'
+        f'embedding = "{TEST_EMBED_MODEL}"\n'
+        f"embedding_dims = {DIMS}\n"
+    )
+    monkeypatch.setattr("nfh.config.CONFIG_FILE", test_config)
     monkeypatch.setattr("nfh.config.LOCAL_CONFIG_FILE", tmp_path / "absent-local.toml")
     monkeypatch.delenv("NFH_OLLAMA_HOST", raising=False)
 

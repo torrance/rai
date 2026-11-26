@@ -6,10 +6,11 @@ import json
 from dataclasses import dataclass, field
 
 from . import ledger
-from .cards import card_path, stale_project_notes, stale_sources, text_hash
+from .cards import stale_project_notes, stale_sources
 from .claims import summary
-from .config import Project
-from .manuscript import stale_chapters
+from .config import Project, same_model
+from .corpus_map import map_hashes
+from .manuscript import manuscript_map_stale, stale_chapters
 from .store import Store
 
 
@@ -54,15 +55,16 @@ def compute(project: Project) -> Status:
     s.stale_chapters = [project.rel(p) for p in stale_chapters(project, store)]
 
     map_note = store.note(project.rel(project.corpus_dir / "map.md"))
-    current = {
-        r["cite_key"]: text_hash(card_path(project, r["cite_key"]).read_text("utf-8"))
-        for r in rows
-        if card_path(project, r["cite_key"]).exists()
-    }
+    current = map_hashes(project, store)
     if current:
         recorded = json.loads(map_note["input_hashes"]) if map_note else {}
-        s.corpus_map_stale = recorded != current
-    s.manuscript_map_stale = bool(s.stale_chapters)
+        s.corpus_map_stale = recorded != current or (
+            map_note is not None
+            and not same_model(map_note["model"], project.models.summarising)
+        )
+    s.manuscript_map_stale = bool(s.stale_chapters) or manuscript_map_stale(
+        project, store
+    )
     s.claims = summary(store)
     citations = project.state_dir / "citations.json"
     if citations.exists():

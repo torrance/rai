@@ -15,7 +15,7 @@ from typing import Any
 
 import numpy as np
 
-from .config import Project
+from .config import Project, parse_ref
 
 SCHEMA_VERSION = "1"
 
@@ -118,7 +118,7 @@ class Store:
         self.conn.execute("PRAGMA foreign_keys = ON")
         self.conn.execute("PRAGMA journal_mode = WAL")
         self.has_vec = _load_vec(self.conn)
-        self.dims = dims or project.models.embed_dims
+        self.dims = dims or project.models.embedding_dims
         self.conn.executescript(SCHEMA)
         if self.has_vec:
             self.conn.execute(
@@ -143,32 +143,56 @@ class Store:
             (key, value),
         )
 
+    def _set_embedding_meta(
+        self, ref: str, dims: int, doc_template: str
+    ) -> None:
+        parsed = parse_ref(ref, field="[models] embedding")
+        self.set_meta("embed_ref", str(parsed))
+        self.set_meta("embed_model", parsed.model)
+        self.set_meta("embed_dims", str(dims))
+        self.set_meta("embed_doc_template", doc_template)
+        self.conn.commit()
+
     def check_embedding_model(
-        self, model: str, dims: int, doc_template: str = "{text}"
+        self, ref: str, dims: int, doc_template: str = "{text}"
     ) -> None:
         """Refuse to mix vectors made with different embedding setups."""
+        parsed = parse_ref(ref, field="[models] embedding")
+        stored_ref = self.get_meta("embed_ref")
         stored_model = self.get_meta("embed_model")
         stored_dims = self.get_meta("embed_dims")
         stored_template = self.get_meta("embed_doc_template")
-        if stored_model is None:
-            self.set_meta("embed_model", model)
-            self.set_meta("embed_dims", str(dims))
-            self.set_meta("embed_doc_template", doc_template)
-            self.conn.commit()
+        if stored_model is None and stored_ref is None:
+            self._set_embedding_meta(str(parsed), dims, doc_template)
             return
         if stored_template is None:
             stored_template = "{text}"  # indexes built before this was configurable
-        if (
-            stored_model != model
-            or int(stored_dims or 0) != dims
-            or stored_template != doc_template
-        ):
+        if stored_ref is None:
+            # An index from before the embedding provider was recorded. It can
+            # only have been Ollama, so don't force a needless re-embed.
+            matches = (
+                parsed.provider == "ollama"
+                and stored_model == parsed.model
+                and int(stored_dims or 0) == dims
+                and stored_template == doc_template
+            )
+            stored_label = f"ollama/{stored_model}"
+        else:
+            matches = (
+                stored_ref == str(parsed)
+                and int(stored_dims or 0) == dims
+                and stored_template == doc_template
+            )
+            stored_label = stored_ref
+        if not matches:
             raise RuntimeError(
-                f"Index was built with {stored_model} ({stored_dims} dims, document "
-                f"template {stored_template!r}) but the settings now say {model} "
+                f"Index was built with {stored_label} ({stored_dims} dims, document "
+                f"template {stored_template!r}) but the settings now say {parsed} "
                 f"({dims} dims, {doc_template!r}). "
                 "Run `nfh ingest --reembed` to rebuild the vectors."
             )
+        if stored_ref is None:  # upgrade the metadata in place
+            self._set_embedding_meta(str(parsed), dims, doc_template)
 
     # Sources -----------------------------------------------------------------
     def source_by_key(self, key: str) -> sqlite3.Row | None:

@@ -58,7 +58,7 @@ def test_your_edit_and_a_newer_template_conflict(project, newer_template):
 
 def test_a_model_change_updates_only_the_model_line_of_an_edited_agent(project):
     add_line(assistant(project), "My own rule.")
-    add_line(project.root / "nfh.toml", '[opencode]\nmodel_alias = "mine"')
+    add_line(project.root / "nfh.toml", '[models]\nresearch = "ollama/mine"')
     project = load_project(project.root)
     result = sync_project(project)
     text = assistant(project).read_text()

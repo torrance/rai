@@ -55,6 +55,11 @@ def _keyword_hits(store: Store, query: str, kind: str) -> list[int]:
 def search(
     store: Store, query: str, kind: str = "text", limit: int = 8
 ) -> list[dict[str, Any]]:
+    store.check_embedding_model(
+        store.project.models.embedding,
+        store.project.models.embedding_dims,
+        store.project.models.document_template,
+    )
     scores: dict[int, float] = {}
     qvec = embed_query(store.project, query)
     for hits in (_vector_hits(store, qvec, kind), _keyword_hits(store, query, kind)):

@@ -16,6 +16,9 @@ import typer
 
 from .config import (
     HARNESS_ROOT,
+    MODEL_STAGES,
+    OPENCODE_GO_API_KEY_ENVS,
+    OPENCODE_GO_MODELS_URL,
     PROJECTS_DIR,
     TEMPLATE_DIR,
     ConfigError,
@@ -26,6 +29,8 @@ from .config import (
     load_project,
     ollama_host,
     opencode_base_url,
+    opencode_go_key,
+    parse_ref,
 )
 from .notes import read_notes
 from .render import render, sync_project, template_values
@@ -182,13 +187,24 @@ def doctor() -> None:
         typer.secho(f"Settings problem: {exc}", fg="red")
         raise typer.Exit(1) from exc
     host = ollama_host(settings)
-    chat_model, embed_model = settings.models.chat, settings.models.embed
+    refs = {
+        stage: parse_ref(getattr(settings.models, stage), field=f"[models] {stage}")
+        for stage in MODEL_STAGES
+    }
+    local = [
+        (stage, ref) for stage, ref in refs.items() if ref.provider != "opencode-go"
+    ]
+    remote = [
+        (stage, ref) for stage, ref in refs.items() if ref.provider == "opencode-go"
+    ]
     source = (
         "this project's settings"
         if project
         else "the harness settings (config.toml, config.local.toml)"
     )
-    typer.echo(f"Using {source}: Ollama at {host}")
+    typer.echo(f"Using {source}.")
+    if local:
+        typer.echo(f"Ollama at {host}")
     if os.environ.get("OLLAMA_HOST"):
         typer.secho(
             "Note: OLLAMA_HOST is set in your shell. nfh ignores it (it is for the "
@@ -196,25 +212,63 @@ def doctor() -> None:
             fg="yellow",
         )
     all_ok = True
-    try:
-        tags = httpx.get(f"{host}/api/tags", timeout=5).json()
-        names = {m["name"] for m in tags.get("models", [])}
-        all_ok &= _ok(f"Ollama at {host}", True)
-        for label, model in (("chat", chat_model), ("embedding", embed_model)):
-            fix = f"ollama pull {model}"
-            if names and model not in names:
-                fix += "\n     the server has: " + ", ".join(sorted(names))
-                close = difflib.get_close_matches(model, sorted(names), n=1)
-                if close:
-                    fix += f"\n     closest: {close[0]}"
-                fix += "\n     or fix [models] in config.toml"
-            all_ok &= _ok(f"{label} model {model}", model in names, fix)
-    except (httpx.HTTPError, ValueError):
+    if local:
+        try:
+            tags = httpx.get(f"{host}/api/tags", timeout=5).json()
+            names = {m["name"] for m in tags.get("models", [])}
+            all_ok &= _ok(f"Ollama at {host}", True)
+            for stage, ref in local:
+                fix = f"ollama pull {ref.model}"
+                if names and ref.model not in names:
+                    fix += "\n     the server has: " + ", ".join(sorted(names))
+                    close = difflib.get_close_matches(ref.model, sorted(names), n=1)
+                    if close:
+                        fix += f"\n     closest: {close[0]}"
+                    fix += f"\n     or fix [models] {stage} in config.toml"
+                all_ok &= _ok(f"{stage} model {ref}", ref.model in names, fix)
+        except (httpx.HTTPError, ValueError):
+            all_ok &= _ok(
+                f"Ollama at {host}",
+                False,
+                "Start it, or check your port forward and [ollama] host in config.toml",
+            )
+    if remote:
+        key = opencode_go_key()
         all_ok &= _ok(
-            f"Ollama at {host}",
-            False,
-            "Start it, or check your port forward and [ollama] host in config.toml",
+            "OpenCode Go key set",
+            bool(key),
+            "Add "
+            + " or ".join(OPENCODE_GO_API_KEY_ENVS)
+            + f" to {HARNESS_ROOT / '.env'}",
         )
+        if key:
+            try:
+                resp = httpx.get(
+                    OPENCODE_GO_MODELS_URL,
+                    headers={"Authorization": f"Bearer {key}", "User-Agent": "nfh/0.1"},
+                    timeout=15,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                items = data if isinstance(data, list) else (
+                    data.get("data") or data.get("models") or []
+                )
+                available = {
+                    m.get("id") for m in items if isinstance(m, dict)
+                }
+                for stage, ref in remote:
+                    all_ok &= _ok(
+                        f"{stage} model {ref}",
+                        ref.model in available,
+                        "check the model ID; `opencode models` lists the "
+                        "account's models",
+                    )
+            except (httpx.HTTPError, ValueError) as exc:
+                all_ok &= _ok(
+                    "OpenCode Go model list",
+                    False,
+                    f"couldn't read {OPENCODE_GO_MODELS_URL}: {exc}",
+                )
     from .zotero import Zotero
 
     if project:

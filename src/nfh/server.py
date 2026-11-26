@@ -111,6 +111,7 @@ def make_server(project: Project) -> FastMCP:
             source = s.source(cite_key)
             if source is None:
                 return f"No source {cite_key!r}."
+            # build_card ends by rebuilding the source's project note too.
             path = build_card(project, s, source, say=log.info)
             return f"Rebuilt {project.rel(path)}."
         finally:

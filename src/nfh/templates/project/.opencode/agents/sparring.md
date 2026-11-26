@@ -1,7 +1,7 @@
 ---
 description: "Argues with a draft: questions, objections, weak steps. Never wording."
 mode: primary
-model: "{{OC_MODEL}}"
+model: "{{OC_MODEL_SPARRING}}"
 permissions:
   - { action: nfh_search_passages, resource: "*", effect: allow }
   - { action: nfh_read_location, resource: "*", effect: allow }

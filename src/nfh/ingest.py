@@ -17,7 +17,7 @@ from typing import Any
 import yaml
 
 from .chunk import embedding_text, make_chunks
-from .config import Project
+from .config import Project, parse_ref
 from .embed import embed_texts
 from .extract import SUPPORTED, extract
 from .store import Store
@@ -203,8 +203,8 @@ def ingest_zotero(
 
     store = Store(project)
     store.check_embedding_model(
-        project.models.embed,
-        project.models.embed_dims,
+        project.models.embedding,
+        project.models.embedding_dims,
         project.models.document_template,
     )
     seen: set[str] = set()
@@ -258,8 +258,8 @@ def ingest_local(
         return report
     store = Store(project)
     store.check_embedding_model(
-        project.models.embed,
-        project.models.embed_dims,
+        project.models.embedding,
+        project.models.embedding_dims,
         project.models.document_template,
     )
     seen: set[str] = set()
@@ -296,11 +296,12 @@ def ingest_local(
 def reembed(project: Project, say: Callable[[str], None] = print) -> int:
     """Re-embed every chunk with the configured model, keeping all text."""
     store = Store(project)
+    store.dims = project.models.embedding_dims
     rows = store.conn.execute(
         "SELECT c.id, c.heading_path, c.text, s.title, s.authors, s.year "
         "FROM chunks c JOIN sources s ON s.id = c.source_id ORDER BY c.id"
     ).fetchall()
-    say(f"Re-embedding {len(rows)} chunks with {project.models.embed}")
+    say(f"Re-embedding {len(rows)} chunks with {project.models.embedding}")
     texts = [
         embedding_text(
             {
@@ -312,18 +313,21 @@ def reembed(project: Project, say: Callable[[str], None] = print) -> int:
         )
         for r in rows
     ]
-    vectors = embed_texts(project, texts)
+    vectors = embed_texts(project, texts) if texts else []
     with store.conn:
         if store.has_vec:
             store.conn.execute("DROP TABLE IF EXISTS chunks_vec")
             store.conn.execute(
                 "CREATE VIRTUAL TABLE chunks_vec "
-                f"USING vec0(embedding float[{project.models.embed_dims}])"
+                f"USING vec0(embedding float[{project.models.embedding_dims}])"
             )
+        store.dims = project.models.embedding_dims
         for row, vec in zip(rows, vectors, strict=True):
             store.replace_vector(row["id"], vec)
-        store.set_meta("embed_model", project.models.embed)
-        store.set_meta("embed_dims", str(project.models.embed_dims))
+        ref = parse_ref(project.models.embedding)
+        store.set_meta("embed_ref", str(ref))
+        store.set_meta("embed_model", ref.model)
+        store.set_meta("embed_dims", str(project.models.embedding_dims))
         store.set_meta("embed_doc_template", project.models.document_template)
     store.close()
     return len(rows)

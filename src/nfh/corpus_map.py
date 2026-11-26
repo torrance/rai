@@ -10,7 +10,7 @@ from typing import Any
 import numpy as np
 
 from .cards import card_path, open_questions, project_note_path, text_hash
-from .config import PROMPT_VERSION, Project
+from .config import PROMPT_VERSION, Project, model_identity, same_model
 from .llm import chat_json, load_prompt
 from .search import search
 from .store import Store
@@ -115,6 +115,23 @@ def _cards(project: Project, store: Store) -> list[dict[str, Any]]:
     return out
 
 
+def _hashes(cards: list[dict[str, Any]], questions: list[str]) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for c in cards:
+        out[f"{c['cite_key']}:card"] = text_hash(c["card"])
+        out[f"{c['cite_key']}:note"] = text_hash(c["note"])
+    out["_questions"] = text_hash("\n".join(questions))
+    return out
+
+
+def map_hashes(project: Project, store: Store) -> dict[str, str]:
+    """Everything the corpus map's prompt is built from, for staleness checks."""
+    cards = _cards(project, store)
+    if not cards:
+        return {}
+    return _hashes(cards, open_questions(project))
+
+
 def _thesis_vectors(store: Store, cards: list[dict]) -> np.ndarray:
     vectors = []
     for c in cards:
@@ -170,18 +187,31 @@ def build_map(
     project: Project, say: Callable[[str], None] = print, rebuild: bool = False
 ) -> str:
     store = Store(project)
+    store.check_embedding_model(
+        project.models.embedding,
+        project.models.embedding_dims,
+        project.models.document_template,
+    )
     cards = _cards(project, store)
     if not cards:
         store.close()
         raise RuntimeError("No cards yet. Run `nfh cards` first.")
     questions = open_questions(project)
+    input_hashes = _hashes(cards, questions)
     coverage_hits = _coverage_hits(store, questions) if questions else "(none)"
     question_text = "\n".join(f"Q{i + 1}: {q}" for i, q in enumerate(questions))
     map_dir = project.corpus_dir
     map_dir.mkdir(parents=True, exist_ok=True)
     json_path = map_dir / "map.json"
     previous = json.loads(json_path.read_text()) if json_path.exists() else {}
-    theme_cache: dict[str, Any] = {} if rebuild else previous.get("theme_cache", {})
+    map_note = store.note(project.rel(map_dir / "map.md"))
+    model_changed = bool(
+        map_note is not None
+        and not same_model(map_note["model"], project.models.summarising)
+    )
+    theme_cache: dict[str, Any] = (
+        {} if rebuild or model_changed else previous.get("theme_cache", {})
+    )
 
     if len(cards) <= project.limits.corpus_single_pass_cards:
         say(f"Building the corpus map from {len(cards)} cards in one pass")
@@ -192,6 +222,7 @@ def build_map(
             f"Search hits per question:\n{coverage_hits}\n\nCards:\n\n"
             + "\n\n=====\n\n".join(c["card"] + "\n" + c["note"] for c in cards),
             MAP_SCHEMA,
+            stage="summarising",
         )
         new_cache: dict[str, Any] = {}
     else:
@@ -211,6 +242,7 @@ def build_map(
                 load_prompt("corpus_theme"),
                 "\n\n=====\n\n".join(c["card"] for c in group["cards"]),
                 THEME_SCHEMA,
+                stage="summarising",
             )
             themes.append(theme)
             new_cache[digest] = theme
@@ -226,6 +258,7 @@ def build_map(
                 c["cite_key"] + ":\n" + _claims_section(c["card"]) for c in cards
             ),
             SYNTHESIS_SCHEMA,
+            stage="summarising",
         )
         result["themes"] = themes
 
@@ -253,8 +286,8 @@ def build_map(
     store.record_note(
         project.rel(map_dir / "map.md"),
         "corpus_map",
-        {c["cite_key"]: text_hash(c["card"]) for c in cards},
-        project.models.chat,
+        input_hashes,
+        model_identity(project.models.summarising),
         PROMPT_VERSION,
     )
     store.close()

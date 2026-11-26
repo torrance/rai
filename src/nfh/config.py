@@ -20,8 +20,42 @@ PROJECTS_DIR = HARNESS_ROOT / "projects"
 
 PROMPT_VERSION = "1"
 
+# The five model slots. Each is a single model reference; there is no fallback.
+CHAT_STAGES = ("reading", "summarising", "research", "sparring")
+MODEL_STAGES = (*CHAT_STAGES, "embedding")
+
+# Providers nfh can call directly (for pipeline jobs and embeddings) and can
+# name in the OpenCode config. Ollama is local; OpenCode Go is OpenAI-compatible.
+MODEL_PROVIDERS = ("ollama", "opencode-go")
+OPENCODE_GO_BASE_URL = "https://opencode.ai/inference/go"
+OPENCODE_GO_CHAT_URL = f"{OPENCODE_GO_BASE_URL}/openai/v1/chat/completions"
+OPENCODE_GO_EMBEDDINGS_URL = f"{OPENCODE_GO_BASE_URL}/openai/v1/embeddings"
+OPENCODE_GO_MODELS_URL = f"{OPENCODE_GO_BASE_URL}/v1/models"
+OPENCODE_GO_API_KEY_ENV = "OPENCODE_API_KEY"
+OPENCODE_GO_API_KEY_ENVS = (OPENCODE_GO_API_KEY_ENV, "OPENCODE_GO_API_KEY")
+
+DEFAULT_READING_MODEL = "opencode-go/deepseek-v4.1-flash"
+DEFAULT_SUMMARISING_MODEL = "opencode-go/claude-haiku-5-5"
+DEFAULT_RESEARCH_MODEL = "opencode-go/gemini-4-argon"
+DEFAULT_SPARRING_MODEL = "opencode-go/gemini-4-argon"
+DEFAULT_EMBED_MODEL = "ollama/qwen3-embedding:8b-q4_K_M"
+DEFAULT_EMBED_DIMS = 4096
+
+
+class ConfigError(ValueError):
+    """A problem in config.toml, config.local.toml or a project's nfh.toml."""
+
 
 MODEL_CACHE = HARNESS_ROOT / ".cache" / "huggingface"
+
+
+def opencode_go_key() -> str:
+    """The OpenCode Go key, from either documented environment name."""
+    for name in OPENCODE_GO_API_KEY_ENVS:
+        value = os.environ.get(name, "").strip()
+        if value:
+            return value
+    return ""
 
 
 def load_env(path: Path | None = None) -> None:
@@ -67,11 +101,75 @@ class OllamaSettings:
     opencode_base_url: str = ""
 
 
+@dataclass(frozen=True)
+class ModelRef:
+    """``provider/model[#variant]``; a bare name is an Ollama model."""
+
+    provider: str
+    model: str
+    variant: str = ""
+
+    @property
+    def base(self) -> str:
+        return f"{self.provider}/{self.model}"
+
+    def __str__(self) -> str:
+        return self.base + (f"#{self.variant}" if self.variant else "")
+
+
+def parse_ref(value: str, *, field: str = "model") -> ModelRef:
+    """Parse a model reference, rejecting providers nfh can't talk to."""
+    value = (value or "").strip()
+    if not value:
+        raise ConfigError(f"{field} can't be empty")
+    base, hash_sep, variant = value.partition("#")
+    variant = variant.strip()
+    if hash_sep and not variant:
+        raise ConfigError(f"{field} has an empty #variant: {value!r}")
+    provider, sep, model = base.partition("/")
+    provider = provider.strip()
+    if not sep:
+        provider, model = "ollama", base.strip()
+    model = model.strip()
+    if not model:
+        raise ConfigError(f"{field} needs a model after the provider: {value!r}")
+    if provider not in MODEL_PROVIDERS:
+        raise ConfigError(
+            f"{field}: unknown provider {provider!r} in {value!r}; "
+            f"known providers: {', '.join(MODEL_PROVIDERS)}"
+        )
+    return ModelRef(provider=provider, model=model, variant=variant)
+
+
+def model_identity(value: str) -> str:
+    """Canonical provider/model form, ignoring a pipeline-ignored variant."""
+    return parse_ref(value).base
+
+
+def same_model(left: str | None, right: str | None) -> bool:
+    """Whether two stored/configured names mean the same underlying model.
+
+    This also lets an old database that stored a bare Ollama name match the
+    new explicit ``ollama/<name>`` form without a needless rebuild.
+    """
+    if not left or not right:
+        return False
+    try:
+        return model_identity(left) == model_identity(right)
+    except ConfigError:
+        return left == right
+
+
 @dataclass
 class ModelSettings:
-    chat: str = "qwen3.8-flash-next:125b-a6b-q4_K_M"
-    embed: str = "qwen3-embedding:0.6b"
-    embed_dims: int = 1024
+    # One model per stage. These are all required; nfh never falls back from
+    # one stage to another.
+    reading: str = DEFAULT_READING_MODEL
+    summarising: str = DEFAULT_SUMMARISING_MODEL
+    research: str = DEFAULT_RESEARCH_MODEL
+    sparring: str = DEFAULT_SPARRING_MODEL
+    embedding: str = DEFAULT_EMBED_MODEL
+    embedding_dims: int = DEFAULT_EMBED_DIMS
     num_ctx: int = 262144
     query_instruction: str = (
         "Given a question about a body of texts, retrieve passages that answer it"
@@ -82,20 +180,14 @@ class ModelSettings:
 
 @dataclass
 class OpenCodeSettings:
+    # The local provider nfh configures for OpenCode. Stage refs using this
+    # provider get a generated provider block; opencode-go refs use OpenCode's
+    # built-in provider and its own credential.
     provider: str = "ollama"
     provider_package: str = "@opencode/ai/providers/openai-compatible"
-    model_alias: str = "qwen-flash"
     quick_variant: str = "quick"
     quick_reasoning_effort: str = "low"
     nfh_command: list[str] = field(default_factory=list)
-
-    @property
-    def model_ref(self) -> str:
-        return f"{self.provider}/{self.model_alias}"
-
-    @property
-    def quick_ref(self) -> str:
-        return f"{self.model_ref}#{self.quick_variant}"
 
 
 # The sources paper-search-mcp can search (its own list, plus two that need paid keys).
@@ -234,10 +326,6 @@ LOCAL_CONFIG_FILE = HARNESS_ROOT / "config.local.toml"
 BUILTIN = "built-in default"
 
 
-class ConfigError(ValueError):
-    """A problem in config.toml, config.local.toml or a project's nfh.toml."""
-
-
 def _sections(project: Project) -> dict[str, object]:
     return {
         "zotero": project.zotero,
@@ -266,10 +354,22 @@ def _same_type(current: object, value: object) -> bool:
     return isinstance(value, type(current))
 
 
+REPLACED_MODEL_KEYS = {
+    "chat": "reading, summarising, research and sparring",
+    "embed": "embedding",
+    "embed_dims": "embedding_dims",
+}
+
+
 def _apply(obj: object, values: dict, section: str, label: str) -> None:
     valid = {f.name for f in fields(obj)}
     for key, value in values.items():
         if key not in valid:
+            if section == "models" and key in REPLACED_MODEL_KEYS:
+                raise ConfigError(
+                    f"{label}: [models] {key} was replaced by "
+                    f"[models] {REPLACED_MODEL_KEYS[key]}; set each stage explicitly."
+                )
             raise ConfigError(
                 f"{label}: unknown setting [{section}] {key}. "
                 f"Valid settings: {', '.join(sorted(valid))}."
@@ -329,8 +429,32 @@ def _validate(project: Project) -> None:
         problems.append("[models] document_template must contain {text}")
     if m.num_ctx < 0:
         problems.append("[models] num_ctx must be 0 (server default) or positive")
-    if m.embed_dims <= 0:
-        problems.append("[models] embed_dims must be positive")
+    if m.embedding_dims <= 0:
+        problems.append("[models] embedding_dims must be positive")
+    if project.opencode.provider not in MODEL_PROVIDERS:
+        problems.append(
+            f"[opencode] provider must be one of {', '.join(MODEL_PROVIDERS)}"
+        )
+    for stage in MODEL_STAGES:
+        try:
+            ref = parse_ref(getattr(m, stage), field=f"[models] {stage}")
+        except ConfigError as exc:
+            problems.append(str(exc))
+            continue
+        if ref.provider not in {project.opencode.provider, "opencode-go"}:
+            problems.append(
+                f"[models] {stage} uses provider {ref.provider!r}, but "
+                f"[opencode] provider is {project.opencode.provider!r}; "
+                "use that provider or 'opencode-go'."
+            )
+        if stage in {"summarising", "embedding"} and ref.variant:
+            problems.append(
+                f"[models] {stage} can't have a #variant; variants apply to "
+                "OpenCode agent turns"
+            )
+    quick = project.opencode.quick_variant
+    if quick and quick.startswith("#"):
+        problems.append("[opencode] quick_variant must not start with '#'")
     if not project.ollama.host.strip():
         problems.append("[ollama] host can't be empty")
     sources = project.scout.paper_sources

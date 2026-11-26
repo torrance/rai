@@ -14,9 +14,10 @@ data_dir = "~/Zotero"        # Zotero's data directory (holds storage/)
 api = "http://127.0.0.1:23119/api"
 
 # Models, the Ollama address and OpenCode's naming come from the harness's
-# config.toml. To change one for this project only, repeat its section here, e.g.
+# config.toml. To change one stage for this project only, repeat its section
+# here, e.g.
 #   [models]
-#   chat = "qwen-flash-128k"
+#   summarising = "opencode-go/<model-id>"
 # then run `nfh sync`.
 
 [limits]

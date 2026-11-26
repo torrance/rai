@@ -11,7 +11,15 @@ import pytest
 from typer.testing import CliRunner
 
 from nfh.cli import app
-from nfh.config import Project, load_env, load_project, ollama_host
+from nfh.config import (
+    MODEL_STAGES,
+    Project,
+    load_env,
+    load_project,
+    ollama_host,
+    parse_ref,
+)
+from nfh.render import sync_project
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -36,7 +44,9 @@ def scratch_project(tmp_path_factory, live_project) -> Project:
         (root / "nfh.toml").write_text(
             (live_project.root / "nfh.toml").read_text(encoding="utf-8")
         )
-    return load_project(root)
+    project = load_project(root)
+    sync_project(project)
+    return project
 
 
 @pytest.fixture(scope="session")
@@ -47,6 +57,13 @@ def project(live_project, scratch_project) -> Project:
 
 @pytest.fixture(scope="session")
 def ollama(project):
+    local = [
+        stage
+        for stage in MODEL_STAGES
+        if parse_ref(getattr(project.models, stage)).provider == "ollama"
+    ]
+    if not local:
+        pytest.skip("all stages use OpenCode Go")
     client = httpx.Client(base_url=ollama_host(project), timeout=None)
     try:
         client.get("/api/version", timeout=5).raise_for_status()

@@ -9,12 +9,16 @@ from nfh.brief import build_brief
 from nfh.check import check_quotes
 from nfh.claims import update_claim
 from nfh.ingest import ingest_local
+from nfh.status import compute
 from nfh.store import Store
 
 from .conftest import SAMPLE
 
+STAGES: list[str] = []
 
-def fake_chat(project, system, user, schema, think=True, retries=1):
+
+def fake_chat(project, system, user, schema, think=True, retries=1, *, stage=""):
+    STAGES.append(stage)
     props = schema["properties"]
     if "summary" in props and "claims" in props:  # card unit
         return {
@@ -125,6 +129,7 @@ def fake_chat(project, system, user, schema, think=True, retries=1):
 
 @pytest.fixture
 def scripted(monkeypatch, fake_ollama):
+    STAGES.clear()
     for module in (cards, corpus_map, manuscript):
         monkeypatch.setattr(module, "chat_json", fake_chat)
 
@@ -154,6 +159,30 @@ def test_card_drops_bad_locations_and_quotes(project, scripted):
     corpus_map.build_map(project, say=lambda _: None)
     assert "Flexibility" in (project.corpus_dir / "map.md").read_text()
 
+    assert STAGES[0] == "reading"
+    assert "summarising" in STAGES
+    assert set(STAGES) == {"reading", "summarising"}
+
+    # A stage-model change makes the card stale even when the source is unchanged.
+    project.models.summarising = "ollama/other-summary-model"
+    assert [s["cite_key"] for s in cards.stale_sources(project, store)] == [
+        "writer2024"
+    ]
+
+    # An old bare model name means the same Ollama model: units are reused.
+    store.conn.execute(
+        "UPDATE units SET model='qwen3.8-flash-next:125b-a6b-q4_K_M'"
+    )
+    STAGES.clear()
+    cards.build_card(project, store, source, say=lambda _: None)
+    assert "reading" not in STAGES
+
+    # The corpus map is also built from the open questions, not just cards.
+    project.project_md.write_text(
+        "# T\n\n## Open questions\n- Is it flexible?\n- What changed later?\n"
+    )
+    assert compute(project).corpus_map_stale
+
     results = check_quotes(project)
     assert results and all(r.status == "exact" for r in results)
     store.close()
@@ -173,6 +202,7 @@ def test_manuscript_claims_and_brief(project, scripted):
     )
     done = manuscript.build_manuscript(project, say=lambda _: None)
     assert len(done) == 1
+    assert set(STAGES) == {"summarising"}
     store = Store(project)
     row = store.conn.execute("SELECT * FROM claims").fetchone()
     assert row["id"] == "intro-c01" and row["cited"] == "@writer2024, para 2"
@@ -190,3 +220,25 @@ def test_manuscript_claims_and_brief(project, scripted):
     text = build_brief(project)
     assert "drafts/intro.md" in text and "Claims: 1 total" in text
     assert "1 supported" in project.claims_path.read_text()
+
+    # Deleting the only draft must remove the stale manuscript map.
+    (project.drafts_dir / "intro.md").unlink()
+    manuscript.build_manuscript(project, say=lambda _: None)
+    assert not (project.manuscript_dir / "map.md").exists()
+
+
+def test_manuscript_map_with_no_chapters_is_stale(project):
+    map_path = project.manuscript_dir / "map.md"
+    map_path.write_text("# stale map\n")
+    store = Store(project)
+    store.record_note(
+        project.rel(map_path),
+        "book_map",
+        {},
+        project.models.summarising,
+        "1",
+    )
+    assert manuscript.manuscript_map_stale(project, store)
+    store.close()
+    manuscript.build_manuscript(project, say=lambda _: None)
+    assert not map_path.exists()

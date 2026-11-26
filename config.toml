@@ -21,14 +21,32 @@ host = "http://127.0.0.1:11434"
 opencode_base_url = ""
 
 [models]
-chat = "qwen3.8-flash-next:125b-a6b-q4_K_M"
-embed = "qwen3-embedding:0.6b"
+# One model per stage. There is no fallback: all five must be set.
+#
+# A reference is "provider/model", optionally with "#variant". Variants apply
+# to OpenCode agent turns; nfh's own pipeline calls use the base model. A bare
+# model name means Ollama (prefix it with "ollama/" if the local name contains
+# "/"). The providers are:
+#   ollama/<model>         local Ollama (nfh talks to [ollama] host)
+#   opencode-go/<model>    OpenCode Go; needs OPENCODE_API_KEY (or
+#                          OPENCODE_GO_API_KEY) in .env
+#
+# Reading raw source text (card units) and the reader subagent.
+reading = "opencode-go/deepseek-v4.1-flash"
+# Higher-level synthesis: cards, corpus map, chapter and manuscript maps.
+summarising = "opencode-go/claude-haiku-5-5"
+# The main assistant agent in OpenCode.
+research = "opencode-go/gemini-4-argon"
+# The adversarial Sparring agent in OpenCode.
+sparring = "opencode-go/gemini-4-argon"
+# The embedding model used for indexing and search.
+embedding = "ollama/qwen3-embedding:8b-q4_K_M"
 # What the embedding model returns. `nfh selftest` checks it.
-embed_dims = 1024
-# The context window nfh asks for on its own chat calls. It must equal what
+embedding_dims = 4096
+# The context window nfh asks for on its own Ollama calls. It must equal what
 # Ollama allocates for OpenCode's calls (which can't ask), or Ollama reloads the
 # model whenever the two take turns. 0 = ask for nothing and use the server's
-# own default.
+# own default. This has no effect on OpenCode Go models.
 num_ctx = 262144
 # How text is wrapped before it is embedded. These defaults suit
 # qwen3-embedding; other models want other formats (see their model cards).
@@ -39,14 +57,16 @@ query_template = "Instruct: {instruction}\nQuery: {query}"
 document_template = "{text}"
 
 [opencode]
-# How OpenCode names the model: <provider>/<model_alias>, plus a "quick"
-# variant (reasoning turned down). No agent uses it by default; choose it in
-# OpenCode when you want faster, shallower answers.
+# The local provider nfh configures for OpenCode. Stage refs using this provider
+# get a generated provider block; opencode-go refs use OpenCode's built-in
+# provider and its own credential.
 provider = "ollama"
 # How OpenCode talks to that provider. Without it OpenCode can't call the model
 # ("Unsupported package for ollama/..."): the project defines its own model entry.
 provider_package = "@opencode/ai/providers/openai-compatible"
-model_alias = "qwen-flash"
+# A quicker variant added to local Ollama models, with reasoning turned down.
+# No agent uses it by default; choose it in OpenCode when you want faster,
+# shallower answers. Empty quick_variant adds no variant.
 quick_variant = "quick"
 # Sent in the quick variant's request body. "" omits it, for an Ollama that
 # rejects the field.

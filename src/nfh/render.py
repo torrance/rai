@@ -18,8 +18,10 @@ from pathlib import Path
 from .config import (
     HARNESS_ROOT,
     TEMPLATE_DIR,
+    ModelRef,
     Project,
     opencode_base_url,
+    parse_ref,
 )
 
 PAPER_SEARCH_PIN = "paper-search-mcp==0.1.4"
@@ -49,6 +51,50 @@ def papers_command(settings: Project) -> list[str]:
     return ["uvx", "--from", PAPER_SEARCH_PIN, "--with", "mcp<2", "python", "-c", code]
 
 
+def _quick_variants(settings: Project) -> list[dict[str, object]]:
+    oc = settings.opencode
+    if not oc.quick_variant:
+        return []
+    effort = oc.quick_reasoning_effort.strip()
+    body = {"reasoning_effort": effort} if effort else {}
+    return [{"id": oc.quick_variant, "body": body}]
+
+
+def opencode_providers(settings: Project) -> dict[str, object]:
+    """Provider blocks for stage models OpenCode must reach locally.
+
+    opencode-go models use OpenCode's built-in provider and credential, so they
+    need no block here. Local stage models share the configured provider block.
+    """
+    oc = settings.opencode
+    models = (
+        settings.models.reading,
+        settings.models.research,
+        settings.models.sparring,
+    )
+    by_provider: dict[str, dict[str, object]] = {}
+    variants = _quick_variants(settings)
+    for value in models:
+        ref: ModelRef = parse_ref(value, field="[models] agent")
+        if ref.provider == "opencode-go":
+            continue
+        entry: dict[str, object] = {"modelID": ref.model}
+        if variants:
+            entry["variants"] = variants
+        by_provider.setdefault(ref.provider, {})[ref.model] = entry
+    return {
+        provider: {
+            "package": oc.provider_package,
+            "settings": {
+                "baseURL": opencode_base_url(settings),
+                "headerTimeout": False,
+            },
+            "models": provider_models,
+        }
+        for provider, provider_models in by_provider.items()
+    }
+
+
 def template_values(
     settings: Project,
     name: str = "",
@@ -56,25 +102,22 @@ def template_values(
     collection: str = "",
     tags: list[str] | None = None,
 ) -> dict[str, str]:
-    oc = settings.opencode
     command = nfh_command(settings)
-    effort = oc.quick_reasoning_effort.strip()
-    body = {"reasoning_effort": effort} if effort else {}
+    m = settings.models
+    reading = parse_ref(m.reading, field="[models] reading")
+    research = parse_ref(m.research, field="[models] research")
+    sparring = parse_ref(m.sparring, field="[models] sparring")
     return {
         "{{HARNESS_ROOT}}": str(HARNESS_ROOT),
         "{{PROJECT_NAME}}": name,
         "{{PROJECT_TITLE}}": title,
         "{{COLLECTION}}": collection,
         "{{TAGS}}": "[" + ", ".join(f'"{t}"' for t in (tags or [])) + "]",
-        "{{OC_PROVIDER}}": _json_inner(oc.provider),
-        "{{OC_PACKAGE}}": _json_inner(oc.provider_package),
-        "{{OC_ALIAS}}": _json_inner(oc.model_alias),
-        "{{OC_MODEL}}": _json_inner(oc.model_ref),
-        "{{OC_MODEL_QUICK}}": _json_inner(oc.quick_ref),
-        "{{OC_QUICK_VARIANT}}": _json_inner(oc.quick_variant),
-        "{{OC_QUICK_BODY}}": json.dumps(body),
-        "{{CHAT_MODEL}}": _json_inner(settings.models.chat),
-        "{{OLLAMA_V1_URL}}": _json_inner(opencode_base_url(settings)),
+        "{{OC_MODEL_RESEARCH}}": _json_inner(str(research)),
+        "{{OC_MODEL_RESEARCH_BASE}}": _json_inner(research.base),
+        "{{OC_MODEL_SPARRING}}": _json_inner(str(sparring)),
+        "{{OC_MODEL_READER}}": _json_inner(str(reading)),
+        "{{OC_PROVIDERS_JSON}}": json.dumps(opencode_providers(settings), indent=2),
         "{{PAPERS_COMMAND_JSON}}": json.dumps(papers_command(settings)),
         "{{NFH_COMMAND_JSON}}": json.dumps([*command, "--project", ".", "serve"]),
         "{{NFH_COMMAND_SH}}": shlex.join(command).replace("'", "'\\''"),

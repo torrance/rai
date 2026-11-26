@@ -1,4 +1,7 @@
-from nfh.ingest import ingest_local
+import numpy as np
+import pytest
+
+from nfh.ingest import ingest_local, reembed
 from nfh.search import read_location, search
 from nfh.store import Store
 from nfh.verify import verify_quote
@@ -19,6 +22,42 @@ def test_local_ingest_skips_readme_and_is_idempotent(project, fake_ollama):
     assert report.added == ["writer2024"]
     again = ingest_local(project, say=lambda _: None)
     assert again.unchanged == ["writer2024"] and not again.added
+
+
+def test_reembed_can_change_provider_and_dimensions(project, fake_ollama, monkeypatch):
+    _ingest(project)
+    project.models.embedding = "opencode-go/e"
+    project.models.embedding_dims = 8
+    monkeypatch.setattr(
+        "nfh.ingest.embed_texts",
+        lambda p, texts: np.zeros((len(texts), 8), dtype=np.float32),
+    )
+    assert reembed(project) > 0
+    store = Store(project)
+    assert store.get_meta("embed_ref") == "opencode-go/e"
+    assert store.get_meta("embed_dims") == "8"
+    blob = store.conn.execute("SELECT embedding FROM chunks LIMIT 1").fetchone()[0]
+    assert len(blob) == 8 * 4
+    store.close()
+
+
+def test_reembed_on_an_empty_index_updates_the_vector_setup(project):
+    project.models.embedding = "opencode-go/e"
+    project.models.embedding_dims = 8
+    assert reembed(project) == 0
+    store = Store(project)
+    assert store.get_meta("embed_ref") == "opencode-go/e"
+    assert store.get_meta("embed_dims") == "8"
+    store.close()
+
+
+def test_search_refuses_an_unreembedded_embedding_change(project, fake_ollama):
+    _ingest(project)
+    project.models.embedding_dims = 8
+    store = Store(project)
+    with pytest.raises(RuntimeError, match="--reembed"):
+        search(store, "deactivation")
+    store.close()
 
 
 def test_search_read_and_verify(project, fake_ollama):

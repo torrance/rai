@@ -50,7 +50,7 @@ QUOTE = "replaces the supervisor without removing supervision"
 
 
 @pytest.fixture(scope="module")
-def indexed(ollama, scratch_project):
+def indexed(scratch_project):
     p = scratch_project
     p.project_md.write_text(
         "# Scratch\n\n## Thesis\nRatings are management by other means.\n\n"
@@ -103,12 +103,15 @@ def test_corpus_map(indexed):
 
 
 def test_manuscript_claims_and_brief(indexed):
-    (indexed.drafts_dir / "01-intro.md").write_text(
+    draft = indexed.drafts_dir / "01-intro.md"
+    draft.write_text(
         "# Introduction\n\nCustomer ratings let platforms manage couriers without "
         "managers [@test2024ratings, para 2].\n\nThis essay argues that the "
         "flexibility couriers are promised is mostly a story.\n"
     )
-    done = manuscript.build_manuscript(indexed, say=print)
+    # The agent tests share this scratch project and leave their own drafts
+    # behind; map only this test's file.
+    done = manuscript.build_manuscript(indexed, only=draft, force=True, say=print)
     assert len(done) == 1
     store = Store(indexed)
     claims = list(store.conn.execute("SELECT * FROM claims WHERE active=1"))

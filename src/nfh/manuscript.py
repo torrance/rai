@@ -20,7 +20,7 @@ from rapidfuzz import fuzz
 
 from .cards import read_frontmatter, text_hash, write_with_frontmatter
 from .claims import render_claims
-from .config import PROMPT_VERSION, Project
+from .config import PROMPT_VERSION, Project, model_identity, same_model
 from .llm import chat_json, load_prompt
 from .store import Store, now
 
@@ -345,7 +345,11 @@ def map_chapter(
         )
     say(f"  mapping {project.rel(path)} ({len(numbered)} paragraphs)")
     result = chat_json(
-        project, load_prompt("chapter_note"), "\n\n".join(lines), CHAPTER_SCHEMA
+        project,
+        load_prompt("chapter_note"),
+        "\n\n".join(lines),
+        CHAPTER_SCHEMA,
+        stage="summarising",
     )
     chapter = chapter_id(path, project)
     claim_ids = _sync_claims(store, chapter, file_hash, result["claims"], numbered)
@@ -360,6 +364,7 @@ def map_chapter(
         "file_hash": file_hash,
         "words": len(re.findall(r"\w+", text)),
         "mapped": now()[:10],
+        "model": model_identity(project.models.summarising),
     }
     argument = "\n".join(
         f"{i}. {a['step']} (paras {a['paras']})"
@@ -389,7 +394,7 @@ def map_chapter(
         project.rel(out),
         "chapter",
         {"file": file_hash},
-        project.models.chat,
+        model_identity(project.models.summarising),
         PROMPT_VERSION,
     )
     return out
@@ -399,7 +404,9 @@ def stale_chapters(project: Project, store: Store) -> list[Path]:
     out = []
     for path in draft_files(project):
         meta, _ = read_frontmatter(note_path(project, path))
-        if meta.get("file_hash") != text_hash(path.read_text(encoding="utf-8")):
+        if meta.get("file_hash") != text_hash(
+            path.read_text(encoding="utf-8")
+        ) or not same_model(meta.get("model"), project.models.summarising):
             out.append(path)
     return out
 
@@ -417,6 +424,30 @@ def write_citation_index(project: Project) -> None:
     )
 
 
+def _note_hashes(project: Project) -> dict[str, str]:
+    out = {}
+    for path in draft_files(project):
+        note = note_path(project, path)
+        if note.exists():
+            out[project.rel(note)] = text_hash(note.read_text(encoding="utf-8"))
+    return out
+
+
+def manuscript_map_stale(project: Project, store: Store) -> bool:
+    """Whether the project map no longer matches the chapter notes or model."""
+    out = project.manuscript_dir / "map.md"
+    note = store.note(project.rel(out))
+    current = _note_hashes(project)
+    if note is None:
+        return out.exists()
+    if not current and out.exists():
+        return True
+    recorded = json.loads(note["input_hashes"] or "{}")
+    return recorded != current or not same_model(
+        note["model"], project.models.summarising
+    )
+
+
 def build_manuscript(
     project: Project,
     only: Path | None = None,
@@ -426,6 +457,7 @@ def build_manuscript(
     store = Store(project)
     files = [only] if only else draft_files(project)
     stale = set(stale_chapters(project, store))
+    map_stale = manuscript_map_stale(project, store)
     done = []
     for path in files:
         if force or path in stale:
@@ -439,7 +471,11 @@ def build_manuscript(
             )
     store.conn.commit()
     write_citation_index(project)
-    if done or not (project.manuscript_dir / "map.md").exists():
+    if (
+        done
+        or map_stale
+        or (files and not (project.manuscript_dir / "map.md").exists())
+    ):
         build_project_map(project, store, say=say)
     render_claims(project, store)
     store.close()
@@ -453,6 +489,9 @@ def build_project_map(
     notes = [n for n in notes if n.exists()]
     out = project.manuscript_dir / "map.md"
     if not notes:
+        out.unlink(missing_ok=True)
+        store.conn.execute("DELETE FROM notes WHERE path=?", (project.rel(out),))
+        store.conn.commit()
         return None
     say("  writing the project-level manuscript map")
     texts = [n.read_text(encoding="utf-8") for n in notes]
@@ -461,6 +500,7 @@ def build_project_map(
         load_prompt("manuscript_map"),
         "\n\n=====\n\n".join(texts),
         MAP_SCHEMA,
+        stage="summarising",
     )
     files = "\n\n".join(f"### {f['file']}\n{f['summary']}" for f in result["files"])
     glossary = "\n".join(
@@ -486,7 +526,7 @@ def build_project_map(
         project.rel(out),
         "book_map",
         {project.rel(n): text_hash(t) for n, t in zip(notes, texts, strict=True)},
-        project.models.chat,
+        model_identity(project.models.summarising),
         PROMPT_VERSION,
     )
     return out

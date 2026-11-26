@@ -1,9 +1,12 @@
 # nfh: a non-fiction research and writing harness
 
-nfh gives a local model (Qwen3.8-Flash-Next on Ollama) the tools and memory to
-help you plan, research and argue about a piece of non-fiction, while leaving
-the writing to you. You write in your own editor and talk to the agents in a
-chat. You never edit their notes. It runs inside OpenCode as three agents:
+nfh gives a set of models the tools and memory to help you plan, research and
+argue about a piece of non-fiction, while leaving the writing to you. Each
+stage has its own model: raw reading, higher-level summarising, the research
+assistant, the Sparring partner and embeddings. Models can be local Ollama
+models or paid OpenCode Go models, mixed freely. You write in your own editor
+and talk to the agents in a chat. You never edit their notes. It runs inside
+OpenCode as three agents:
 
 | Agent | What it does | What it can write |
 | --- | --- | --- |
@@ -50,7 +53,7 @@ Four rules run through everything:
 ```text
 nfh/                          # the harness: code and templates only
   README.md  pyproject.toml  uv.lock  .python-version
-  config.toml                 # settings: Ollama address, models, context, OpenCode names
+  config.toml                 # settings: Ollama address, stage models, context, providers
   config.local.toml           # your own changes to those (optional; gitignored)
   .env                        # your API keys (copy from .env.example; gitignored)
   src/nfh/                    # the Python package
@@ -140,11 +143,14 @@ These steps assume Linux, as in the design sketch, and two machines:
 
 | Runs on the Ollama server | Runs on your writing machine |
 | --- | --- |
-| Qwen3.8-Flash-Next (cards, maps, every agent) | OpenCode and the agents' tool calls |
-| qwen3-embedding (indexing and search) | nfh: index (SQLite), search, quote checks, notes |
+| Any stage models you keep local (reading, summarising, research, sparring) | OpenCode and the agents' tool calls |
+| A local embedding model, if you use one | nfh: index (SQLite), search, quote checks, notes |
 | | Zotero and its local API; pandoc |
 | | Docling's PDF layout models (CPU only) |
 | | zotero-mcp, paper-search-mcp (no models) |
+
+Stage models that use OpenCode Go run on OpenCode's servers instead and need
+`OPENCODE_API_KEY` in `.env`.
 
 If Ollama does run on the same machine, nothing changes except that the
 forward isn't needed.
@@ -232,8 +238,9 @@ EOF
 ollama create qwen-flash-128k -f Modelfile
 ```
 
-You'll set `chat = "qwen-flash-128k"` and `num_ctx = 131072` in nfh's settings
-in step 3, so nfh and OpenCode both use that name and the same context.
+You'll set the stages that stay on Ollama to `ollama/qwen-flash-128k` and
+`num_ctx = 131072` in nfh's settings in step 3, so nfh and OpenCode both use
+that name and the same context.
 
 Without the server's q8_0 KV cache the context needs more VRAM, so start at 128K
 and let `nfh selftest --only ollama` tell you whether it fits on the GPUs. If
@@ -273,6 +280,7 @@ Fill in `.env`:
 
 | Key | What it's for | Where to get it |
 | --- | --- | --- |
+| `OPENCODE_API_KEY` (or `OPENCODE_GO_API_KEY`) | OpenCode Go stage models and embeddings | OpenCode Console > Account > API keys (Go subscription) |
 | `TINYFISH_API_KEY` | The web search (through OpenCode) | tinyfish.ai; free, no card |
 | `OPENALEX_API_KEY` | Scholarly metadata for candidates | openalex.org > Settings > API; free |
 | `UNPAYWALL_EMAIL` | Finding open-access full text | Any address you read |
@@ -289,9 +297,18 @@ with a port forward on 11435 and the 128K model variant from step 2:
 host = "http://127.0.0.1:11435"
 
 [models]
-chat = "qwen-flash-128k"
+reading = "opencode-go/deepseek-v4.1-flash"
+summarising = "opencode-go/claude-haiku-5-5"
+research = "opencode-go/gemini-4-argon"
+sparring = "opencode-go/gemini-4-argon"
+embedding = "ollama/qwen3-embedding:8b-q4_K_M"
+embedding_dims = 4096
 num_ctx = 131072
 ```
+
+Model references are `provider/model`, optionally with `#variant`; a bare name
+means Ollama. The providers are `ollama` and `opencode-go`. All five stages are
+required: nfh never falls back from one to another.
 
 If the defaults suit you, skip the file. Check what is in force:
 
@@ -385,7 +402,7 @@ whole setup properly with `nfh selftest` (next section).
 
 `nfh doctor` checks that things are installed. `nfh selftest` checks that they
 work together, by running the live test suite in `tests/live/` against your
-real Ollama, Zotero, APIs and OpenCode. Run it after setup, after upgrading
+real models (Ollama and/or OpenCode Go), Zotero, APIs and OpenCode. Run it after setup, after upgrading
 anything, and whenever something seems off.
 
 ```bash
@@ -402,7 +419,7 @@ warnings in the summary at the end.
 | Area | What's verified |
 | --- | --- |
 | **Local machine** | No CUDA packages installed; PyTorch is a CPU-only build (not CUDA or ROCm); Docling's models are cached inside the harness; which Ollama server the harness reaches |
-| **Ollama** | Both models pulled; tool and completion capabilities; model 100% on GPU; Ollama's default context equals `[models] num_ctx` (skipped when it is 0) (otherwise the 120 GB model reloads every time agents and jobs take turns); JSON-schema output; 9/10 well-formed tool calls through `/v1`, the endpoint OpenCode uses; the `reasoning_effort` field the `quick` variant sends; embedding dimensions and sense. `--slow`: recall of a fact buried mid-way through a long prompt |
+| **Models** | Every local stage model is pulled; the research model has tool and completion capabilities and sits 100% on the GPU; Ollama's default context equals `[models] num_ctx` (skipped when it is 0) (otherwise the model reloads every time agents and jobs take turns); JSON-schema output; 9/10 well-formed tool calls through `/v1`, the endpoint OpenCode uses; the `reasoning_effort` field the `quick` variant sends; embedding dimensions and sense. `--slow`: recall of a fact buried mid-way through a long prompt |
 | **Zotero** | Local API answers; storage folder exists. With `--project`: scope isn't empty, items have files on disk, citation keys present in Zotero's own field (not made up by nfh) and unique, `tag_match` modes consistent, `references.bib` contains every key |
 | **Extraction** | Docling installed and used, with printed page labels kept. With `--project`: a real PDF from the scope extracts with headings |
 | **Scholarly APIs** | OpenAlex key accepted; Unpaywall email works; TinyFish key present; the candidate reader fetches a real open-access article in full |
@@ -437,27 +454,49 @@ set it.
 | --- | --- | --- |
 | `[ollama] host` | `http://127.0.0.1:11434` | Where nfh reaches Ollama (the scheme is optional; a trailing `/v1` is ignored) |
 | `[ollama] opencode_base_url` | empty | Where OpenCode reaches it; empty means `<host>/v1` |
-| `[models] chat` | `qwen3.8-flash-next:125b-a6b-q4_K_M` | The chat model, for nfh's own calls and for OpenCode |
-| `[models] embed`, `embed_dims` | `qwen3-embedding:0.6b`, `1024` | The embedding model and the length of its vectors |
-| `[models] num_ctx` | `262144` | The context nfh asks for. It must equal what Ollama allocates for OpenCode (which can't ask) or Ollama reloads the model whenever the two take turns. `0` asks for nothing |
+| `[models] reading` | `opencode-go/deepseek-v4.1-flash` | Reads raw source text into card units; also the reader subagent |
+| `[models] summarising` | `opencode-go/claude-haiku-5-5` | Higher-level synthesis: cards, corpus map, chapter and manuscript maps |
+| `[models] research` | `opencode-go/gemini-4-argon` | The assistant agent |
+| `[models] sparring` | `opencode-go/gemini-4-argon` | The adversarial Sparring agent |
+| `[models] embedding`, `embedding_dims` | `ollama/qwen3-embedding:8b-q4_K_M`, `4096` | The embedding model and the length of its vectors |
+| `[models] num_ctx` | `262144` | The context nfh asks for on Ollama calls. It must equal what Ollama allocates for OpenCode (which can't ask) or Ollama reloads the model whenever the two take turns. `0` asks for nothing; OpenCode Go ignores it |
 | `[models] query_instruction`, `query_template`, `document_template` | Qwen3-embedding's format | How text is wrapped before embedding. Other models want other formats: see their model cards |
-| `[opencode] provider`, `provider_package`, `model_alias`, `quick_variant`, `quick_reasoning_effort` | `ollama`, `@opencode/ai/providers/openai-compatible`, `qwen-flash`, `quick`, `low` | How OpenCode names the model, and the reasoning-turned-down variant (no agent uses it by default; choose it in OpenCode for faster, shallower answers). An empty effort omits the field |
+| `[opencode] provider`, `provider_package`, `quick_variant`, `quick_reasoning_effort` | `ollama`, `@opencode/ai/providers/openai-compatible`, `quick`, `low` | The local provider nfh configures for OpenCode, and the reasoning-turned-down variant added to local models. No agent uses it by default; choose it in OpenCode for faster, shallower answers. An empty effort omits the field |
 | `[scout] paper_sources` | `openalex`, `crossref`, `doaj`, `core`, `ssrn` | The scholarly databases the paper search may use (the assistant and Sparring both have it). **Enforced**: the search tool is started knowing only these, so no agent can reach the others even if it asks. The default leaves out arXiv, bioRxiv, medRxiv, PubMed, PMC, Europe PMC, dblp, IACR and CiteSeerX, which drowned out social science, humanities and economics results. Other options: `base`, `hal`, `openaire`, `semantic`, `zenodo` |
 | `[opencode] nfh_command` | empty | The command OpenCode and the git hook use to start nfh. Empty means `uv run --project <this folder> nfh` |
 
 ### Common changes
 
-- **A different chat model:** set `chat` in `config.local.toml`, run
-  `nfh sync --all`.
+- **A different model for a stage:** set that stage under `[models]` in
+  `config.local.toml`, then run `nfh sync --all`. For example, keep summarising
+  local and send Sparring to OpenCode Go:
+  ```toml
+  [models]
+  summarising = "ollama/qwen3.8-flash-next:125b-a6b-q4_K_M"
+  sparring = "opencode-go/<strong-model-id>"
+  ```
+  All five stages must be present; there is no `chat` fallback. For everything
+  on OpenCode Go, give all five stages an `opencode-go/...` reference and set
+  `embedding_dims` to the embedding model's native size.
+- **Using OpenCode Go:** put `OPENCODE_API_KEY` (or `OPENCODE_GO_API_KEY`) in
+  `.env` and name a stage `opencode-go/<model-id>`. The same key serves
+  OpenCode's built-in
+  `opencode-go` provider and nfh's own pipeline and embedding calls. If
+  OpenCode doesn't pick the key up, run `/connect` once and choose OpenCode Go;
+  `nfh open` loads `.env` into its environment. A variant can be selected with
+  `#`, for example `opencode-go/<model-id>#low`. Variants apply to OpenCode
+  agent turns; nfh's own pipeline calls use the base model. The embedding
+  stage takes no variant.
 - **A different Ollama address or port:** set `[ollama] host`, run
   `nfh sync --all`. For one session only, `export NFH_OLLAMA_HOST=...` (this
   changes nfh's calls, not OpenCode's). nfh deliberately ignores the plain
   `OLLAMA_HOST` variable: it belongs to the `ollama` command, which accepts a
   different format and may point at a different Ollama.
-- **A different embedding model:** set `embed`, `embed_dims` and the three
-  format settings for that model, then `nfh ingest --reembed` in each project.
-  The index records the model, dimensions and document format, and refuses to
-  mix vectors made with different ones.
+- **A different embedding model:** set `embedding`, `embedding_dims` and the
+  three format settings for that model, then `nfh ingest --reembed` in each
+  project. This works the same for `ollama/...` and `opencode-go/...`. The
+  index records the provider, model, dimensions and document format, and
+  refuses to mix vectors made with different ones.
 - **Moving the harness folder:** run `nfh sync --all` afterwards, since the
   generated files contain its path. Or set `nfh_command` to something that
   doesn't depend on the location (for example `["nfh"]`, with a small wrapper
@@ -492,8 +531,8 @@ project is out of date.
 **When to run `nfh sync`.** Only once projects exist and something that feeds
 those files has changed:
 
-- You changed `[ollama]`, `[models] chat`, `[scout]` or anything in `[opencode]`, in
-  `config.toml`, `config.local.toml` or a project's `nfh.toml`.
+- You changed `[ollama]`, any `[models]` stage, `[scout]` or anything in
+  `[opencode]`, in `config.toml`, `config.local.toml` or a project's `nfh.toml`.
 - You moved or renamed the harness folder (the files contain its path, unless
   `nfh_command` is set).
 - You replaced the harness with a newer version: sync brings in newer agent
@@ -502,10 +541,11 @@ those files has changed:
 - `nfh doctor`, `nfh selftest --project` or `nfh sync --check` says a project
   is out of date.
 
-You don't need it for `num_ctx`, `embed`, `embed_dims`, the embedding templates,
-`[zotero]`, `[limits]` or `[drafts]`: nfh reads those on every run. (Changing
-the embedding model or `document_template` needs `nfh ingest --reembed`
-instead. And `num_ctx` must still match what Ollama allocates for OpenCode.)
+You don't need it for `num_ctx`, `embedding`, `embedding_dims`, the embedding
+templates, `[zotero]`, `[limits]` or `[drafts]`: nfh reads those on every run.
+(Changing the embedding model or `document_template` needs
+`nfh ingest --reembed` instead. And `num_ctx` must still match what Ollama
+allocates for OpenCode.)
 
 ### Upgrading a project made with an earlier version
 
@@ -513,8 +553,12 @@ Earlier versions kept notes in `notes/` and a journal you approved by hand. The
 new layout (above) replaces them, so an existing project needs these steps once:
 
 1. Update the harness (`unzip -o nfh.zip -x "nfh/uv.lock"`, then `uv sync`).
-2. In the project, run `nfh sync --force`. A plain `nfh sync` updates
-   `opencode.jsonc` and the hook (earlier versions recorded those), but treats
+2. Replace the old `[models] chat`, `embed` and `embed_dims` settings with the
+   five explicit stages: `reading`, `summarising`, `research`, `sparring`,
+   `embedding` (plus `embedding_dims`). There is no `chat` fallback, and
+   `nfh` will tell you if one is missing. Then run `nfh sync --force`. A plain
+   `nfh sync` updates `opencode.jsonc` and the hook (earlier versions recorded
+   those), but treats
    `AGENTS.md` and the agent and command files as hand-edited, because nfh has no
    record of having written them, and leaves your copies with a `.nfh-new` beside
    each. If you customised an agent's instructions, use the plain `nfh sync` and
@@ -528,8 +572,9 @@ new layout (above) replaces them, so an existing project needs these steps once:
    ```
 
 4. Run `nfh refresh`. It rebuilds the notes in their new places inside `.nfh/`.
-   Your cards are reused; the per-source notes, maps and draft notes are
-   regenerated, which takes model time.
+   Cards are rebuilt once because the stage-model signature changed; unit
+   readings are reused where possible. The per-source notes, maps and draft
+   notes are regenerated, which takes model time.
 5. Delete the old `notes/` and `research/` folders once you've kept anything you
    want from them. Old journal decisions aren't imported: tell the assistant or
    Sparring partner again what you had decided, and they'll record it.
@@ -927,10 +972,10 @@ with the old prompt as stale.
 - **There is no migration command.** Upgrading an earlier project is a few
   manual steps, [above](#upgrading-a-project-made-with-an-earlier-version); old
   journal entries aren't imported.
-- **Not everything is configurable yet.** The Ollama address, models, context,
-  embedding format and OpenCode names are. Thresholds, token budgets,
-  timeouts (nfh's Ollama calls have none), search defaults and `embed_dims`
-  detection are still fixed in the code.
+- **Not everything is configurable yet.** The Ollama address, the five stage
+  models, context, embedding format and provider settings are. Thresholds, token
+  budgets, timeouts (nfh's Ollama calls have none), search defaults and
+  embedding-dimension detection are still fixed in the code.
 - **`uv.lock` predates the CPU-only PyTorch change.** It was generated
   where `download.pytorch.org` was unreachable, so your first `uv sync`
   re-resolves PyTorch and updates the lock. `uv sync --locked` will refuse

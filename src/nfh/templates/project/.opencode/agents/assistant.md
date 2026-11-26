@@ -1,7 +1,7 @@
 ---
 description: "Your research assistant: analyses what you hold, prioritises what to read, plans, and finds and assesses new sources when asked"
 mode: primary
-model: "{{OC_MODEL}}"
+model: "{{OC_MODEL_RESEARCH}}"
 permissions:
   - { action: nfh_search_passages, resource: "*", effect: allow }
   - { action: nfh_read_location, resource: "*", effect: allow }

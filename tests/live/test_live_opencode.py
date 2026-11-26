@@ -129,12 +129,19 @@ def test_agents_load_and_the_drafts_guard_holds_in_opencodes_own_rules(
         assert name in agents, f"{name} didn't load: {sorted(agents)}"
     assert "build" not in agents and "plan" not in agents, "built-in agents are on"
 
-    oc = project.opencode
+    from nfh.config import parse_ref
+
+    expected_models = {
+        "assistant": project.models.research,
+        "sparring": project.models.sparring,
+        "reader": project.models.reading,
+    }
     for name in ours:
         model = agents[name].get("model") or {}
+        expected = parse_ref(expected_models[name])
         assert (model.get("providerID"), model.get("id")) == (
-            oc.provider,
-            oc.model_alias,
+            expected.provider,
+            expected.model,
         ), f"{name} uses {model}; run `nfh sync`"
 
     for name in ours:
