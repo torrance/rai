@@ -333,7 +333,9 @@ def test_project_note_staleness_tracks_draft_citations(project, scripted):
     assert [s["cite_key"] for s in cards.stale_project_notes(project, store)] == [
         "writer2024"
     ]
+    STAGES.clear()
     cards.build_project_note(project, store, source, say=lambda _: None)
+    assert STAGES == []  # citation-only change reuses the existing relevance
     note = cards.project_note_path(project, "writer2024").read_text()
     assert "drafts/a.md: 2 time(s)" in note
     assert cards.stale_project_notes(project, store) == []

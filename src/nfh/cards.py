@@ -567,26 +567,37 @@ def build_project_note(
     )
     questions = open_questions(project)
     questions_text = "\n".join(questions)
-    if questions:
-        say("  relating to the project's open questions")
-        rel = chat_json(
-            project,
-            load_prompt("card_relevance"),
-            "Open questions:\n"
-            + "\n".join(f"Q{i + 1}: {q}" for i, q in enumerate(questions))
-            + f"\n\nSource card:\n{card_text}",
-            RELEVANCE_SCHEMA,
-            think=True,
-            stage="summarising",
-        )
-        lines = [f"## Relevance\n{rel.get('overall', '').strip()}\n"]
-        for r in rel.get("relevance", []):
-            lines.append(
-                f"- {r['question']} ({r['role']}): {r['note']} Read: {r['read']}"
+    existing_meta, existing_body = read_frontmatter(path)
+    reuse = (
+        bool(existing_body)
+        and existing_meta.get("card_hash") == text_hash(card_text)
+        and existing_meta.get("questions_hash") == text_hash(questions_text)
+        and same_model(existing_meta.get("model"), project.models.summarising)
+    )
+    relevance = (
+        existing_body.split("\n## Cited in drafts", 1)[0].strip() if reuse else ""
+    )
+    if not relevance.startswith("## Relevance"):
+        if questions:
+            say("  relating to the project's open questions")
+            rel = chat_json(
+                project,
+                load_prompt("card_relevance"),
+                "Open questions:\n"
+                + "\n".join(f"Q{i + 1}: {q}" for i, q in enumerate(questions))
+                + f"\n\nSource card:\n{card_text}",
+                RELEVANCE_SCHEMA,
+                think=True,
+                stage="summarising",
             )
-        relevance = "\n".join(lines)
-    else:
-        relevance = "## Relevance\nproject.md has no 'Open questions' section yet."
+            lines = [f"## Relevance\n{rel.get('overall', '').strip()}\n"]
+            for r in rel.get("relevance", []):
+                lines.append(
+                    f"- {r['question']} ({r['role']}): {r['note']} Read: {r['read']}"
+                )
+            relevance = "\n".join(lines)
+        else:
+            relevance = "## Relevance\nproject.md has no 'Open questions' section yet."
     cited = _cited_in_drafts(project, source["cite_key"])
     citations_hash = _citations_hash(project, source["cite_key"])
     meta = {
