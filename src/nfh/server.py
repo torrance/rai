@@ -19,7 +19,7 @@ from .cards import build_card
 from .cards import read_card as _read_card
 from .claims import update_claim as _update_claim
 from .config import Project, load_project
-from .manuscript import build_manuscript
+from .manuscript import DRAFT_SUFFIXES, build_manuscript
 from .search import read_location as _read_location
 from .search import search
 from .store import Store
@@ -120,7 +120,13 @@ def make_server(project: Project) -> FastMCP:
     @mcp.tool()
     def refresh_chapter(path: str) -> str:
         """Rebuild the note and claims for one draft file, e.g. drafts/intro.md."""
-        target = (project.root / path).resolve()
+        rel = ledger.draft_rel(project, path)
+        target = (project.root / rel).resolve()
+        if (
+            not target.is_relative_to(project.drafts_dir.resolve())
+            or target.suffix.lower() not in DRAFT_SUFFIXES
+        ):
+            return f"{path!r} is not a draft file under drafts/."
         if not target.exists():
             return f"No draft file {path!r}."
         done = build_manuscript(project, only=target, force=True, say=log.info)

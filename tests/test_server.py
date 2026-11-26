@@ -74,6 +74,15 @@ def test_decision_tools_round_trip_through_the_server(project):
     assert notes is not None
 
 
+def test_refresh_chapter_rejects_paths_outside_drafts(project):
+    server = make_server(project)
+    (project.root.parent / "outside.md").write_text("# Outside\n")
+    (project.drafts_dir / ".gitkeep").write_text("")
+    for path in ("project.md", "../outside.md", "drafts/.gitkeep"):
+        result = call(server, "refresh_chapter", path=path)
+        assert "not a draft file" in str(result)
+
+
 def test_set_reading_status_checks_the_source_exists(project):
     server = make_server(project)
     call(server, "set_reading_status", cite_key="nobody", status="read")
