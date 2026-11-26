@@ -298,8 +298,11 @@ def _bullets(items: list[dict], fmt: Callable[[dict], str]) -> str:
 
 
 def render_card(source: Any, card: dict[str, Any]) -> str:
+    def cell(text: Any) -> str:
+        return str(text).replace("|", "/")
+
     rows = "\n".join(
-        f"| {s['part']} | {s['locations']} | {s['argument']} |"
+        f"| {cell(s['part'])} | {cell(s['locations'])} | {cell(s['argument'])} |"
         for s in card.get("structure", [])
     )
 
@@ -339,6 +342,64 @@ def render_card(source: Any, card: dict[str, Any]) -> str:
 def _source_header(source: Any) -> str:
     authors = ", ".join(authors_list(source)) or "unknown author"
     return f"{source['title']} by {authors} ({source['year'] or 'n.d.'})"
+
+
+COMBINE_BATCH_UNITS = 25
+
+
+def _compact(value: Any) -> Any:
+    """Drop empty values from JSON sent to the combiner; keep every real entry."""
+    if isinstance(value, dict):
+        return {
+            key: compact
+            for key, item in value.items()
+            if (compact := _compact(item)) not in ("", [], {}, None)
+        }
+    if isinstance(value, list):
+        return [_compact(item) for item in value]
+    return value
+
+
+def _combine_units(
+    project: Project,
+    source: Any,
+    outputs: list[dict[str, Any]],
+    say: Callable[[str], None] = print,
+) -> dict[str, Any]:
+    """Combine unit readings, batching very long books to bound the payload."""
+    header = f"Source: {_source_header(source)}"
+    card: dict[str, Any] | None = None
+    batches = [
+        outputs[start : start + COMBINE_BATCH_UNITS]
+        for start in range(0, len(outputs), COMBINE_BATCH_UNITS)
+    ] or [[]]
+    if len(batches) > 1:
+        say(f"  combining {len(outputs)} unit readings in {len(batches)} batches")
+    for n, batch in enumerate(batches, start=1):
+        payload = json.dumps(_compact(batch), ensure_ascii=False)
+        if card is None:
+            card = chat_json(
+                project,
+                load_prompt("card_combine"),
+                f"{header}\n\nUnit readings (JSON):\n{payload}",
+                COMBINE_SCHEMA,
+                think=True,
+                stage="summarising",
+            )
+            continue
+        say(f"    merging batch {n}/{len(batches)}")
+        card = chat_json(
+            project,
+            load_prompt("card_merge"),
+            f"{header}\n\nExisting card (JSON):\n"
+            + json.dumps(_compact(card), ensure_ascii=False)
+            + f"\n\nFurther unit readings (JSON):\n{payload}"
+            + "\n\nReturn the merged card.",
+            COMBINE_SCHEMA,
+            think=True,
+            stage="summarising",
+        )
+    return card or {}
 
 
 def build_card(
@@ -414,15 +475,7 @@ def build_card(
     )
 
     say("  combining")
-    combined = chat_json(
-        project,
-        load_prompt("card_combine"),
-        f"Source: {_source_header(source)}\n\nUnit readings (JSON):\n"
-        + json.dumps(outputs, ensure_ascii=False),
-        COMBINE_SCHEMA,
-        think=True,
-        stage="summarising",
-    )
+    combined = _combine_units(project, source, outputs, say=say)
     combined, ok, dropped = check_combined_card(store, source["id"], combined)
     checked += ok
     dropped_total += dropped

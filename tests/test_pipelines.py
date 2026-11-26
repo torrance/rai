@@ -201,6 +201,59 @@ def test_card_drops_bad_locations_and_quotes(project, scripted):
     store.close()
 
 
+def test_render_card_escapes_pipes_in_table_cells():
+    card = {
+        "thesis": "t",
+        "structure": [{"part": "A | B", "locations": "p. 1", "argument": "x | y"}],
+        "concepts": [],
+        "claims": [],
+        "passages": [],
+        "interlocutors": [],
+        "limits": [],
+    }
+    text = cards.render_card({"title": "T"}, card)
+    assert "| A / B | p. 1 | x / y |" in text
+
+
+def test_combine_batches_long_books(project, monkeypatch):
+    calls: list[tuple[str, str]] = []
+
+    def fake(project, system, user, schema, think=True, retries=1, *, stage=""):
+        calls.append((system, user))
+        return {
+            "thesis": "t",
+            "structure": [],
+            "concepts": [],
+            "claims": [],
+            "passages": [],
+            "interlocutors": [],
+            "limits": [],
+        }
+
+    monkeypatch.setattr(cards, "chat_json", fake)
+    monkeypatch.setattr(cards, "load_prompt", lambda name: name)
+    outputs = [
+        {
+            "summary": f"unit {n}",
+            "claims": [],
+            "concepts": [],
+            "passages": [],
+            "interlocutors": [],
+            "limits": [],
+        }
+        for n in range(cards.COMBINE_BATCH_UNITS + 1)
+    ]
+    result = cards._combine_units(
+        project,
+        {"title": "T", "year": "2024", "authors": "[]"},
+        outputs,
+        say=lambda _: None,
+    )
+    assert result["thesis"] == "t"
+    assert [system for system, _ in calls] == ["card_combine", "card_merge"]
+    assert "Further unit readings" in calls[1][1]
+
+
 def test_open_questions_keeps_sub_bullets_and_stops_at_prose(project):
     project.project_md.write_text(
         "# T\n\n"
