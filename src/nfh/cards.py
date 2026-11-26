@@ -227,18 +227,21 @@ def project_note_path(project: Project, cite_key: str) -> Path:
 
 
 # Checks ----------------------------------------------------------------------
-def _location_ok(store: Store, source_id: int, loc: str, unit: dict) -> bool:
+def _location_ok(
+    store: Store, source_id: int, loc: str, unit: dict | None = None
+) -> bool:
     span = resolve_location(store, source_id, loc)
     if span is None:
         return False
+    if unit is None:
+        return True
     first, last = span
     return not (last < unit["first_block"] or first > unit["last_block"])
 
 
-def check_unit(
-    store: Store, source_id: int, unit: dict, output: dict[str, Any]
-) -> tuple[dict[str, Any], int, int]:
-    """Drop entries with impossible locations; verify or drop quotes."""
+def _check_entries(
+    store: Store, source_id: int, output: dict[str, Any], unit: dict | None = None
+) -> tuple[int, int]:
     ok = dropped = 0
     for field in ("claims", "concepts", "passages", "interlocutors"):
         kept = []
@@ -249,6 +252,13 @@ def check_unit(
             else:
                 dropped += 1
         output[field] = kept
+    return ok, dropped
+
+
+def _check_passage_quotes(
+    store: Store, source_id: int, output: dict[str, Any]
+) -> int:
+    dropped = 0
     for passage in output.get("passages", []):
         quote = (passage.get("quote") or "").strip()
         if not quote:
@@ -261,7 +271,25 @@ def check_unit(
         else:
             passage["quote"] = ""
             dropped += 1
+    return dropped
+
+
+def check_unit(
+    store: Store, source_id: int, unit: dict, output: dict[str, Any]
+) -> tuple[dict[str, Any], int, int]:
+    """Drop entries with impossible locations; verify or drop quotes."""
+    ok, dropped = _check_entries(store, source_id, output, unit)
+    dropped += _check_passage_quotes(store, source_id, output)
     return output, ok, dropped
+
+
+def check_combined_card(
+    store: Store, source_id: int, card: dict[str, Any]
+) -> tuple[dict[str, Any], int, int]:
+    """Re-check the model's combined card, which can reintroduce bad entries."""
+    ok, dropped = _check_entries(store, source_id, card)
+    dropped += _check_passage_quotes(store, source_id, card)
+    return card, ok, dropped
 
 
 # Rendering -------------------------------------------------------------------
@@ -395,6 +423,9 @@ def build_card(
         think=True,
         stage="summarising",
     )
+    combined, ok, dropped = check_combined_card(store, source["id"], combined)
+    checked += ok
+    dropped_total += dropped
     body = render_card(source, combined)
     path = card_path(project, source["cite_key"])
     if path.exists():

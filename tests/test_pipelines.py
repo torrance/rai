@@ -69,7 +69,18 @@ def fake_chat(project, system, user, schema, think=True, retries=1, *, stage="")
                     "what": "key",
                     "why": "thesis",
                     "quote": "flexibility is largely illusory",
-                }
+                },
+                {
+                    "location": "para 3",
+                    "what": "hallucinated in the combine step",
+                    "why": "test",
+                    "quote": "this sentence is not in the source at all",
+                },
+                {
+                    "location": "p. 999",
+                    "what": "impossible location in the combine step",
+                    "why": "test",
+                },
             ],
             "interlocutors": [],
             "limits": [],
@@ -144,6 +155,8 @@ def test_card_drops_bad_locations_and_quotes(project, scripted):
     path = cards.build_card(project, store, source, say=lambda _: None)
     text = path.read_text()
     assert "Platform work is less flexible" in text
+    assert "this sentence is not in the source at all" not in text
+    assert "impossible location in the combine step" not in text
     unit = store.conn.execute("SELECT output_json FROM units").fetchone()[0]
     assert "Bogus" not in unit and "not in the source at all" not in unit
     note = cards.project_note_path(project, "writer2024").read_text()
