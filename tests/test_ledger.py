@@ -249,6 +249,18 @@ def test_a_very_long_summary_is_clipped_in_the_briefing(project):
     assert "…" in text and text.count("- long") == 5
 
 
+def test_a_very_long_thesis_is_clipped_in_the_briefing(project):
+    from nfh.brief import BUDGET_TOKENS, build_brief
+    from nfh.config import estimate_tokens
+
+    draft(project)
+    project.project_md.write_text("# T\n\n## Thesis\n" + "word " * 2000 + "\n")
+    text = build_brief(project)
+    assert estimate_tokens(text) < BUDGET_TOKENS
+    assert "…" in text
+    assert "drafts/ch1.md" in text
+
+
 def test_nfh_show_sessions(project):
     summary(project)
     out = runner.invoke(
