@@ -55,7 +55,10 @@ def fake_chat(project, system, user, schema, think=True, retries=1, *, stage="")
     if "thesis" in props:  # combine
         return {
             "thesis": "Platform work is less flexible than claimed.",
-            "structure": [{"part": "Whole", "locations": "paras 1-3", "argument": "x"}],
+            "structure": [
+                {"part": "Whole", "locations": "paras 1-3", "argument": "x"},
+                {"part": "Bogus part", "locations": "p. 999", "argument": "bogus"},
+            ],
             "concepts": [],
             "claims": [
                 {
@@ -161,6 +164,8 @@ def test_card_drops_bad_locations_and_quotes(project, scripted):
     assert "Platform work is less flexible" in text
     assert "this sentence is not in the source at all" not in text
     assert "impossible location in the combine step" not in text
+    assert "hallucinated in the combine step" not in text
+    assert "Bogus part" not in text
     assert any(
         "locations verified" in message
         and "dropped" in message
@@ -169,6 +174,7 @@ def test_card_drops_bad_locations_and_quotes(project, scripted):
     )
     unit = store.conn.execute("SELECT output_json FROM units").fetchone()[0]
     assert "Bogus" not in unit and "not in the source at all" not in unit
+    assert "made up" not in unit
     note = cards.project_note_path(project, "writer2024").read_text()
     assert "central" in note
     from nfh import ledger

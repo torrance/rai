@@ -268,18 +268,33 @@ def _check_passage_quotes(
     store: Store, source_id: int, output: dict[str, Any]
 ) -> int:
     dropped = 0
+    kept = []
     for passage in output.get("passages", []):
         quote = (passage.get("quote") or "").strip()
         if not quote:
+            kept.append(passage)
             continue
         result = verify_quote(store, source_id, quote, passage["location"])
         if result["status"] == "exact":
-            continue
-        if result["status"] == "near" and result.get("actual_wording"):
+            kept.append(passage)
+        elif result["status"] == "near" and result.get("actual_wording"):
             passage["quote"] = result["actual_wording"]
+            kept.append(passage)
         else:
-            passage["quote"] = ""
             dropped += 1
+    output["passages"] = kept
+    return dropped
+
+
+def _check_structure(store: Store, source_id: int, card: dict[str, Any]) -> int:
+    dropped = 0
+    kept = []
+    for row in card.get("structure", []):
+        if _location_ok(store, source_id, row.get("locations", "")):
+            kept.append(row)
+        else:
+            dropped += 1
+    card["structure"] = kept
     return dropped
 
 
@@ -297,6 +312,7 @@ def check_combined_card(
 ) -> tuple[dict[str, Any], int, int]:
     """Re-check the model's combined card, which can reintroduce bad entries."""
     ok, dropped = _check_entries(store, source_id, card)
+    dropped += _check_structure(store, source_id, card)
     dropped += _check_passage_quotes(store, source_id, card)
     return card, ok, dropped
 
