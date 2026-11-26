@@ -503,6 +503,14 @@ def _print_report(report, dry_run: bool) -> None:  # noqa: ANN001
             "nfh will follow the new keys.",
             fg="yellow",
         )
+    if report.placeholder_keys:
+        typer.secho(
+            f"{len(report.placeholder_keys)} item(s) use placeholder citation keys: "
+            f"{', '.join(report.placeholder_keys)}. In Zotero, select them and choose "
+            "Better BibTeX > Refresh BibTeX key, then rerun; nfh will follow the new "
+            "keys.",
+            fg="yellow",
+        )
     for key, why in report.skipped:
         typer.secho(f"skipped {key}: {why}", fg="yellow")
     for key, status, detail in report.flagged:

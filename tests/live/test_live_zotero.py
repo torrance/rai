@@ -75,6 +75,15 @@ def test_citation_keys_are_in_zotero_and_unique(scoped_items):
             f"{by_source['extra']} key(s) are still in the Extra field (pre-Zotero 8); "
             "Better BibTeX's migration moves them into the Citation Key field"
         )
+    if by_source["placeholder"]:
+        placeholders = [
+            i.cite_key for i in scoped_items if i.key_source == "placeholder"
+        ]
+        advise(
+            f"{len(placeholders)} item(s) use placeholder citation keys "
+            f"({', '.join(placeholders)}). Select them in Zotero and choose "
+            "Better BibTeX > Refresh BibTeX key."
+        )
     dupes = [k for k, n in Counter(i.cite_key for i in scoped_items).items() if n > 1]
     assert not dupes, f"duplicate citation keys in scope: {dupes}"
 

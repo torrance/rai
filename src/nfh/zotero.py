@@ -17,6 +17,7 @@ import httpx
 from .config import ZoteroSettings
 
 PAGE = 100
+PLACEHOLDER_KEY = re.compile(r"^(?:zotero-item|item)-\d+$", re.IGNORECASE)
 ATTACHMENT_PREFERENCE = [
     "application/pdf",
     "application/epub+zip",
@@ -41,7 +42,7 @@ class ZoteroItem:
     tags: list[str]
     collections: list[str]
     cite_key: str
-    key_source: str = "zotero"  # zotero (native field) | extra (legacy) | generated
+    key_source: str = "zotero"  # zotero | extra | generated | placeholder
     file: Path | None = None
     file_note: str = ""
     raw: dict[str, Any] = field(default_factory=dict)
@@ -173,6 +174,8 @@ class Zotero:
             cite_key, key_source = _extra_cite_key(data.get("extra", "")), "extra"
         if not cite_key:
             cite_key, key_source = make_cite_key(data, year), "generated"
+        if PLACEHOLDER_KEY.fullmatch(cite_key):
+            key_source = "placeholder"
         return ZoteroItem(
             key=raw["key"],
             title=data.get("title", ""),

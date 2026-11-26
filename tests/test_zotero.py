@@ -109,3 +109,17 @@ def test_key_sources(tmp_path):
     assert Zotero._to_item(native).cite_key == "ruizNative"
     assert Zotero._to_item(ITEMS[0]).key_source == "extra"
     assert Zotero._to_item(ITEMS[1]).key_source == "generated"
+    placeholder = {
+        **ITEMS[0],
+        "data": {**ITEMS[0]["data"], "citationKey": "zotero-item-7"},
+    }
+    assert Zotero._to_item(placeholder).key_source == "placeholder"
+    legacy_placeholder = {
+        **ITEMS[0],
+        "data": {
+            **ITEMS[0]["data"],
+            "citationKey": "",
+            "extra": "Citation Key: item-7",
+        },
+    }
+    assert Zotero._to_item(legacy_placeholder).key_source == "placeholder"

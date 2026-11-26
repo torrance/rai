@@ -37,6 +37,7 @@ class IngestReport:
     planned: list[str] = field(default_factory=list)
     renamed: list[tuple[str, str]] = field(default_factory=list)
     generated_keys: list[str] = field(default_factory=list)
+    placeholder_keys: list[str] = field(default_factory=list)
 
     @property
     def changed(self) -> bool:
@@ -219,6 +220,8 @@ def ingest_zotero(
         seen.add(meta["key"])
         if item.key_source == "generated":
             report.generated_keys.append(item.cite_key)
+        elif item.key_source == "placeholder":
+            report.placeholder_keys.append(item.cite_key)
         if item.file is None:
             report.skipped.append((item.cite_key, item.file_note))
             continue
