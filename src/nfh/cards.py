@@ -581,17 +581,23 @@ def build_project_note(
     else:
         relevance = "## Relevance\nproject.md has no 'Open questions' section yet."
     cited = _cited_in_drafts(project, source["cite_key"])
+    citations_hash = _citations_hash(project, source["cite_key"])
     meta = {
         "cite_key": source["cite_key"],
         "card_hash": text_hash(card_text),
         "questions_hash": text_hash(questions_text),
+        "citations_hash": citations_hash,
         "model": model_identity(project.models.summarising),
     }
     write_with_frontmatter(path, meta, f"{relevance}\n\n## Cited in drafts\n{cited}")
     store.record_note(
         project.rel(path),
         "project_note",
-        {"card": meta["card_hash"], "questions": meta["questions_hash"]},
+        {
+            "card": meta["card_hash"],
+            "questions": meta["questions_hash"],
+            "citations": citations_hash,
+        },
         model_identity(project.models.summarising),
         PROMPT_VERSION,
     )
@@ -607,6 +613,17 @@ def _cited_in_drafts(project: Project, cite_key: str) -> str:
     if not uses:
         return "- Not cited yet"
     return "\n".join(f"- {f}: {n} time(s)" for f, n in sorted(uses.items()))
+
+
+def _citations_hash(project: Project, cite_key: str) -> str:
+    index = project.state_dir / "citations.json"
+    if not index.exists():
+        return ""
+    try:
+        data = json.loads(index.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return ""
+    return text_hash(json.dumps(data.get(cite_key, {}), sort_keys=True))
 
 
 def stale_sources(project: Project, store: Store) -> list[Any]:
@@ -638,6 +655,8 @@ def stale_project_notes(project: Project, store: Store) -> list[Any]:
         if (
             meta.get("card_hash") != card_hash
             or meta.get("questions_hash") != questions_hash
+            or meta.get("citations_hash")
+            != _citations_hash(project, source["cite_key"])
             or not same_model(meta.get("model"), project.models.summarising)
         ):
             out.append(source)

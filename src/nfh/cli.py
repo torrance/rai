@@ -734,6 +734,8 @@ def refresh(
             typer.secho("No Zotero scope in nfh.toml; skipping Zotero.", fg="yellow")
         if any(project.sources_local_dir.iterdir()):
             _print_report(ingest_local(project, say=say), False)
+    # Refresh citations.json first so project notes see the latest draft uses.
+    build_manuscript(project, say=say)
     store = Store(project)
     stale = stale_sources(project, store)
     for n, source in enumerate(stale, start=1):
@@ -745,7 +747,6 @@ def refresh(
     store.close()
     if compute(project).corpus_map_stale:
         build_map(project, say=say)
-    build_manuscript(project, say=say)
     build_brief(project)
     say("Refresh complete.")
 

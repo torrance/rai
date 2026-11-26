@@ -1,5 +1,6 @@
 """Cards, maps, manuscript and briefing with a scripted stand-in for the model."""
 
+import json
 import shutil
 
 import pytest
@@ -252,6 +253,37 @@ def test_combine_batches_long_books(project, monkeypatch):
     assert result["thesis"] == "t"
     assert [system for system, _ in calls] == ["card_combine", "card_merge"]
     assert "Further unit readings" in calls[1][1]
+
+
+def test_project_note_staleness_tracks_draft_citations(project, scripted):
+    project.project_md.write_text("# T\n\n## Open questions\n- Is it flexible?\n")
+    card = cards.card_path(project, "writer2024")
+    cards.write_with_frontmatter(card, {"cite_key": "writer2024"}, "# Card\n")
+    store = Store(project)
+    store.conn.execute(
+        "INSERT INTO sources(key, title, cite_key) "
+        "VALUES('local:x', 'X', 'writer2024')"
+    )
+    store.conn.commit()
+    source = store.source("writer2024")
+    cards.build_project_note(project, store, source, say=lambda _: None)
+    assert cards.stale_project_notes(project, store) == []
+
+    citations = project.state_dir / "citations.json"
+    citations.write_text(json.dumps({"writer2024": {"drafts/a.md": 2}}))
+    assert [s["cite_key"] for s in cards.stale_project_notes(project, store)] == [
+        "writer2024"
+    ]
+    cards.build_project_note(project, store, source, say=lambda _: None)
+    note = cards.project_note_path(project, "writer2024").read_text()
+    assert "drafts/a.md: 2 time(s)" in note
+    assert cards.stale_project_notes(project, store) == []
+
+    citations.write_text(json.dumps({"writer2024": {"drafts/a.md": 3}}))
+    assert [s["cite_key"] for s in cards.stale_project_notes(project, store)] == [
+        "writer2024"
+    ]
+    store.close()
 
 
 def test_open_questions_keeps_sub_bullets_and_stops_at_prose(project):
