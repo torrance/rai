@@ -90,6 +90,15 @@ def test_search_passages_reports_unknown_sources(project):
     assert "No source matches" in str(result)
 
 
+def test_record_decision_refreshes_the_briefing(project):
+    server = make_server(project)
+    call(server, "record_decision", text="Keep the Weber comparison", refs="ch. 3")
+    brief = project.brief_path.read_text()
+    assert "- D1: Keep the Weber comparison [ch. 3]" in brief
+    call(server, "revoke_decision", decision_id="D1")
+    assert "Keep the Weber comparison" not in project.brief_path.read_text()
+
+
 def test_set_reading_status_checks_the_source_exists(project):
     server = make_server(project)
     call(server, "set_reading_status", cite_key="nobody", status="read")

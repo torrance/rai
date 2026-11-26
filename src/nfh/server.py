@@ -204,12 +204,18 @@ def make_server(project: Project) -> FastMCP:
     @mcp.tool()
     def record_decision(text: str, refs: str = "") -> dict:
         """Record something the writer explicitly decided, in their own terms."""
-        return ledger.record_decision(project, text, refs)
+        result = ledger.record_decision(project, text, refs)
+        if result.get("ok"):
+            build_brief(project)
+        return result
 
     @mcp.tool()
     def revoke_decision(decision_id: str) -> dict:
         """Withdraw a recorded decision (D1, D2...) at the writer's request."""
-        return ledger.revoke_decision(project, decision_id)
+        result = ledger.revoke_decision(project, decision_id)
+        if result.get("ok"):
+            build_brief(project)
+        return result
 
     @mcp.tool()
     def set_reading_status(cite_key: str, status: str, note: str = "") -> dict:
