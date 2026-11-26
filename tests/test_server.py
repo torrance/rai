@@ -99,6 +99,18 @@ def test_record_decision_refreshes_the_briefing(project):
     assert "Keep the Weber comparison" not in project.brief_path.read_text()
 
 
+def test_search_passages_reports_index_errors(project, monkeypatch):
+    import nfh.server as server_module
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("Index was built with another embedding setup.")
+
+    monkeypatch.setattr(server_module, "search", broken)
+    server = make_server(project)
+    result = call(server, "search_passages", query="x")
+    assert "another embedding setup" in str(result)
+
+
 def test_set_reading_status_checks_the_source_exists(project):
     server = make_server(project)
     call(server, "set_reading_status", cite_key="nobody", status="read")

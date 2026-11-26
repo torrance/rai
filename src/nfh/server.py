@@ -84,7 +84,7 @@ def make_server(project: Project) -> FastMCP:
                 sources=sources,
                 per_source_limit=per_source_limit,
             )
-        except ValueError as exc:
+        except (ValueError, RuntimeError) as exc:
             return [{"error": str(exc)}]
         finally:
             s.close()
