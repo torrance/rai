@@ -681,6 +681,8 @@ shorten a long one. With one general agent and one critic, you'll rarely need to
    deactivation as discipline? Which sections should I read in full, and which
    sources aren't worth my time?" You get a short answer in the chat; substantial
    findings are also saved in `reports/research/`, with citations and pointers.
+   It can list your library, search inside the sources you name, and show a
+   source's table of contents before you read it.
    Tell it what you've read ("I've read Arendt chapter 3") and it remembers.
 2. **Grow the reading list, when you ask.** "Pull the sources from Rosenblat 2018
    that bear on question 3, then search around them for recent empirical work."
@@ -756,6 +758,7 @@ can also print any of it yourself:
 nfh show objections            # --file drafts/02-argument.md, --status unresolved
 nfh show decisions
 nfh show reading
+nfh show sources              # every indexed source, size, reading status and citations
 nfh show candidates
 nfh show sessions             # summaries of past conversations; --limit 20 for more
 nfh show corpus_map            # also: brief, manuscript_map, chapter_note --file ..., claims
@@ -854,7 +857,7 @@ Run any command inside a project, or pass `--project PATH` first:
 | `nfh new NAME [--title T] [--collection C] [--tag T ...] [--path P] [--no-git]` | Create a project from the template |
 | `nfh doctor` | Check Ollama and the OpenCode Go model list, every stage model (local and OpenCode Go), keys, Zotero, pandoc, sqlite-vec, OpenCode, and that project files match the settings |
 | `nfh config` | Show every setting in force and which file set it |
-| `nfh show WHAT [--file F] [--status S] [--limit N]` | Print an internal note: brief, corpus_map, manuscript_map, chapter_note, claims, objections, decisions, reading, candidates, sessions |
+| `nfh show WHAT [--file F] [--status S] [--limit N]` | Print an internal note: brief, corpus_map, manuscript_map, chapter_note, claims, objections, decisions, reading, sources, candidates, sessions |
 | `nfh sync [--check] [--force] [--all]` | Bring `opencode.jsonc`, `AGENTS.md`, the agent and command files and the git hook up to date, keeping your edits |
 | `nfh ingest` | Index the project's Zotero scope (adds, updates, removes) |
 | `nfh ingest --tag T [--tag U] [--match any\|all]` | Only items with these tags, this run only (never removes) |
