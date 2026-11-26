@@ -113,10 +113,11 @@ class Store:
     def __init__(self, project: Project, dims: int | None = None) -> None:
         self.project = project
         project.state_dir.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(project.db_path)
+        self.conn = sqlite3.connect(project.db_path, timeout=30.0)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA foreign_keys = ON")
         self.conn.execute("PRAGMA journal_mode = WAL")
+        self.conn.execute("PRAGMA busy_timeout = 30000")
         self.has_vec = _load_vec(self.conn)
         self.dims = dims or project.models.embedding_dims
         self.conn.executescript(SCHEMA)

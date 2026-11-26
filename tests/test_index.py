@@ -101,6 +101,12 @@ def test_search_read_and_verify(project, fake_ollama):
     store.close()
 
 
+def test_store_sets_a_busy_timeout(project):
+    store = Store(project)
+    assert store.conn.execute("PRAGMA busy_timeout").fetchone()[0] == 30000
+    store.close()
+
+
 def test_read_location_reports_only_the_blocks_it_shows(project):
     store = Store(project)
     cur = store.conn.execute(
