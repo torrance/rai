@@ -128,6 +128,7 @@ def test_read_notes_views(project):
     assert "arendt1958: read" in read_notes(project, "reading")
     assert "C1 [proposed] T" in read_notes(project, "candidates")
     assert "Not built yet" in read_notes(project, "corpus-map")
+    assert "No sources indexed" in read_notes(project, "sources")
     assert "needs file=" in read_notes(project, "chapter_note")
     assert "Unknown notes" in read_notes(project, "journal")
     assert "No claims yet" in read_notes(project, "claims")

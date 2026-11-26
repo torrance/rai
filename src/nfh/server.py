@@ -175,8 +175,8 @@ def make_server(project: Project) -> FastMCP:
         what: brief | corpus_map | manuscript_map | chapter_note (with file=, a
         draft path) | claims | objections (optionally file=, and status= open,
         will_address, answered, dismissed or unresolved) | decisions | reading |
-        candidates | sessions (summaries of past conversations, newest first;
-        limit= how many, default 5).
+        sources | candidates | sessions (summaries of past conversations, newest
+        first; limit= how many, default 5).
         """
         return notes_view.read_notes(project, what, file, status, limit)
 

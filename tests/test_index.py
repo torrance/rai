@@ -1,7 +1,11 @@
+import json
+
 import numpy as np
 import pytest
 
+from nfh import ledger
 from nfh.ingest import ingest_local, reembed
+from nfh.notes import read_notes
 from nfh.search import read_location, resolve_location, search
 from nfh.store import Store
 from nfh.verify import verify_quote
@@ -127,6 +131,19 @@ def test_search_can_be_restricted_and_balanced_across_sources(project, fake_olla
     with pytest.raises(ValueError, match="No source matches"):
         search(store, "platform", sources=["missing"])
     store.close()
+
+
+def test_read_notes_sources_inventory(project, fake_ollama):
+    _ingest(project)
+    ledger.set_reading_status(project, "writer2024", "read")
+    (project.state_dir / "citations.json").write_text(
+        json.dumps({"writer2024": {"drafts/intro.md": 2}})
+    )
+    text = read_notes(project, "sources")
+    assert text.startswith("1 sources indexed.")
+    assert "| Cite key | Author (year) | Title | Kind |" in text
+    assert "| writer2024 | A. Writer (2024) | Riders | note |" in text
+    assert "| read | 2 |" in text
 
 
 def test_store_sets_a_busy_timeout(project):

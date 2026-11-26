@@ -44,7 +44,7 @@ files. The conversation is the only channel, so:
 - A briefing on the whole project is loaded automatically; read_notes("brief")
   if you can't see it.
 - read_notes(what): corpus_map, manuscript_map, chapter_note (with file=),
-  claims, objections, decisions, reading, candidates, sessions.
+  claims, objections, decisions, reading, sources, candidates, sessions.
 - read_card(cite_key): a source's card and how it bears on the project.
 - reports/ is what you write for the writer to read: plans/, research/,
   feedback/, and reading-list.md (written by the save_candidate tool).

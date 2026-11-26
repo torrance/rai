@@ -6,10 +6,12 @@ by ``nfh show`` (so you can look whenever you're curious).
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from . import ledger
 from .config import Project
+from .store import Store, authors_list
 
 WHAT = {
     "brief": "the short summary of the whole project",
@@ -20,6 +22,7 @@ WHAT = {
     "objections": "objections raised and what was decided (file=, status=)",
     "decisions": "decisions the writer has stated",
     "reading": "which sources the writer says they've read",
+    "sources": "the library inventory: authors, titles, sizes, reading and citations",
     "candidates": "works proposed for reading and what the writer decided",
     "sessions": "past conversations: what was discussed, understood, where it stopped",
 }
@@ -73,6 +76,62 @@ def _sessions(project: Project, limit: int) -> str:
     return "\n\n".join(out)
 
 
+def _citation_counts(project: Project) -> dict[str, int]:
+    index = project.state_dir / "citations.json"
+    if not index.exists():
+        return {}
+    try:
+        data = json.loads(index.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    counts: dict[str, int] = {}
+    for key, uses in data.items():
+        if isinstance(uses, dict):
+            counts[key] = sum(n for n in uses.values() if isinstance(n, int))
+    return counts
+
+
+def _sources(project: Project) -> str:
+    store = Store(project)
+    try:
+        rows = store.sources()
+        if not rows:
+            return "No sources indexed yet. Run `nfh ingest`."
+        reading = ledger.reading_statuses(project)
+        cited = _citation_counts(project)
+        lines = [
+            "| Cite key | Author (year) | Title | Kind | Blocks / pages | "
+            "Reading | Cited |",
+            "| --- | --- | --- | --- | --- | --- | --- |",
+        ]
+        for source in rows:
+            counts = store.conn.execute(
+                "SELECT count(*) n, count(DISTINCT page_index) p FROM blocks "
+                "WHERE source_id=?",
+                (source["id"],),
+            ).fetchone()
+            pages = counts["p"] or 0
+            size = f"{counts['n']} / {pages or '-'}"
+            authors = ", ".join(authors_list(source)) or "unknown author"
+            year = source["year"] or "n.d."
+            status = reading.get(source["cite_key"], {}).get("status", "not read")
+            values = [
+                source["cite_key"] or f"src{source['id']}",
+                f"{authors} ({year})",
+                source["title"] or "-",
+                source["kind"] or "-",
+                size,
+                status,
+                str(cited.get(source["cite_key"], 0) or "-"),
+            ]
+            lines.append(
+                "| " + " | ".join(value.replace("|", "/") for value in values) + " |"
+            )
+        return f"{len(rows)} sources indexed.\n\n" + "\n".join(lines)
+    finally:
+        store.close()
+
+
 def read_notes(
     project: Project, what: str, file: str = "", status: str = "", limit: int = 0
 ) -> str:
@@ -119,6 +178,8 @@ def read_notes(
             + (f" - {v['note']}" if v["note"] else "")
             for k, v in sorted(items.items())
         )
+    if key == "sources":
+        return _sources(project)
     if key == "candidates":
         items = ledger.candidates(project)
         if not items:
