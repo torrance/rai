@@ -168,6 +168,34 @@ def test_read_location_toc_returns_the_heading_outline(project):
     store.close()
 
 
+def test_toc_level_ignores_separators_inside_a_title(project):
+    store = Store(project)
+    cur = store.conn.execute(
+        "INSERT INTO sources(key, title, cite_key) VALUES('local:toc2', 'T', 't')"
+    )
+    source_id = cur.lastrowid
+    store.conn.executemany(
+        "INSERT INTO blocks(source_id, seq, kind, heading_path, text, "
+        "page_index, page_label) VALUES(?,?,?,?,?,?,?)",
+        [
+            (
+                source_id,
+                0,
+                "heading",
+                "Book > Part > Piece > Two",
+                "Piece > Two",
+                1,
+                "1",
+            ),
+            (source_id, 1, "heading", "", "Loose heading", 2, "2"),
+        ],
+    )
+    store.conn.commit()
+    toc = read_location(store, source_id, "toc")
+    assert [h["level"] for h in toc["headings"]] == [3, 1]
+    store.close()
+
+
 def test_read_location_toc_handles_sources_without_headings(project):
     store = Store(project)
     cur = store.conn.execute(

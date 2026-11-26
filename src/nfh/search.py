@@ -418,8 +418,13 @@ def outline(store: Store, source_ref: str | int) -> dict[str, Any]:
     headings = []
     lines = []
     for row in rows:
-        path = row["heading_path"] or row["text"] or ""
-        level = path.count(" > ") + 1
+        path = row["heading_path"] or ""
+        title = row["text"] or ""
+        if path:
+            level = path.count(" > ") + 1 - title.count(" > ")
+        else:
+            level = 1
+        level = max(1, level)
         location = loc_label([row]) or f"seq:{row['seq']}"
         headings.append(
             {
