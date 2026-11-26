@@ -17,9 +17,12 @@ from .store import Store
 from .verify import verify_quote
 
 NOTE_QUOTE = re.compile(
-    r"[\"\u201c]([^\"\u201d]{12,}?)[\"\u201d]\s*\[@([\w:.\-]+)(?:,\s*([^\]]+))?\]"
+    r"[\"\u201c]([^\"\u201d]{12,}?)[\"\u201d]\s*\[@([\w:.\-]+)"
+    r"(?:,\s*([^;\]]+))?(?:;[^\]]*)?\]"
 )
-CARD_QUOTE = re.compile(r"^- ([^:]+):.*?Quote: \"([^\"]{12,})\"", re.MULTILINE)
+CARD_QUOTE = re.compile(
+    r'^- ([^:]+):.*?Quote: "(.*)"[ \t]*$', re.MULTILINE
+)
 
 
 @dataclass

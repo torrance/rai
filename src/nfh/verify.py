@@ -62,6 +62,11 @@ def _search(blocks: list[Any], quote: str) -> dict[str, Any] | None:
     if not q or not text:
         return None
     at = text.find(q)
+    if at < 0:
+        # Writers often include or omit a final full stop inside the quotation.
+        trimmed = q.rstrip(".,;:")
+        if trimmed != q:
+            at = text.find(trimmed)
     if at >= 0:
         i = _block_at(spans, at)
         return {"status": "exact", "block": blocks[i], "actual": None}

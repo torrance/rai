@@ -287,6 +287,24 @@ def test_interlocutors_section_is_available_for_large_libraries():
     )
 
 
+def test_quote_patterns_handle_internal_quotes_and_multi_citations():
+    from nfh.check import CARD_QUOTE, NOTE_QUOTE
+
+    line = (
+        '- para 3: key line Why it matters: thesis. Quote: '
+        '"What we need, then, is "real utopias": utopian ideals"'
+    )
+    card_match = CARD_QUOTE.search(line)
+    assert card_match
+    assert card_match.group(2) == (
+        'What we need, then, is "real utopias": utopian ideals'
+    )
+    note = '"a quoted passage that is long enough" [@one, p. 4; @two, p. 8]'
+    note_match = NOTE_QUOTE.search(note)
+    assert note_match
+    assert note_match.group(2) == "one" and note_match.group(3) == "p. 4"
+
+
 def test_project_note_staleness_tracks_draft_citations(project, scripted):
     project.project_md.write_text("# T\n\n## Open questions\n- Is it flexible?\n")
     card = cards.card_path(project, "writer2024")

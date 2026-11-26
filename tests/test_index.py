@@ -74,6 +74,10 @@ def test_search_read_and_verify(project, fake_ollama):
         store, "writer2024", "flexibility is largely illusory", "para 3"
     )
     assert exact["status"] == "exact"
+    punctuated = verify_quote(
+        store, "writer2024", "flexibility is largely illusory.", "para 3"
+    )
+    assert punctuated["status"] == "exact"
     near = verify_quote(
         store,
         "writer2024",
