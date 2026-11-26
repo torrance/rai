@@ -188,6 +188,32 @@ def test_card_drops_bad_locations_and_quotes(project, scripted):
     store.close()
 
 
+def test_open_questions_keeps_sub_bullets_and_stops_at_prose(project):
+    project.project_md.write_text(
+        "# T\n\n"
+        "## Open questions\n"
+        "1. What is the central claim?\n"
+        "2. How does it relate to the debate?\n"
+        "- For each utopia:\n"
+        "  - What political tradition is it from?\n"
+        "  - What does it assume about human nature?\n"
+        "  - What does it offer as a model?\n"
+        "- What changed after 1990?\n\n"
+        "A paragraph that introduces a taxonomy, not more questions.\n\n"
+        "- The explicit utopias\n"
+        "- The utopia of fiction\n\n"
+        "## Next section\n"
+        "- Not a question\n"
+    )
+    assert cards.open_questions(project) == [
+        "What is the central claim?",
+        "How does it relate to the debate?",
+        "For each utopia: What political tradition is it from? "
+        "What does it assume about human nature? What does it offer as a model?",
+        "What changed after 1990?",
+    ]
+
+
 def search_card_hit(store):
     from nfh.search import search
 

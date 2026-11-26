@@ -172,8 +172,16 @@ def write_with_frontmatter(path: Path, meta: dict[str, Any], body: str) -> str:
     return text
 
 
+LIST_ITEM = re.compile(r"^(?:[-*+]|\d+[.)])\s+(.*)$")
+
+
 def open_questions(project: Project) -> list[str]:
-    """List items under the 'Open questions' heading of project.md."""
+    """Top-level list items under the 'Open questions' heading of project.md.
+
+    A top-level item keeps its indented continuation lines and sub-bullets as
+    part of the same question. Non-indented prose ends the list, so bullets in
+    a following taxonomy or explanatory paragraph are not numbered as questions.
+    """
     if not project.project_md.exists():
         return []
     text = project.project_md.read_text(encoding="utf-8")
@@ -182,8 +190,32 @@ def open_questions(project: Project) -> list[str]:
     )
     if not match:
         return []
-    items = re.findall(r"^\s*(?:[-*]|\d+\.)\s+(.+)$", match.group(1), re.MULTILINE)
-    return [i.strip() for i in items if i.strip()]
+    questions: list[str] = []
+    current: list[str] | None = None
+    base_indent: int | None = None
+    for raw in match.group(1).splitlines():
+        if not raw.strip():
+            continue
+        indent = len(raw) - len(raw.lstrip())
+        item = LIST_ITEM.match(raw.strip())
+        if current is None:
+            if item is None:  # prose before the list is not a question
+                continue
+            base_indent = indent
+            current = [item.group(1).strip()]
+            continue
+        if item is not None and indent <= (base_indent or 0):
+            questions.append(" ".join(current))
+            current = [item.group(1).strip()]
+            base_indent = min(base_indent or indent, indent)
+            continue
+        if item is not None or indent > (base_indent or 0):
+            current.append(item.group(1).strip() if item else raw.strip())
+            continue
+        break  # a non-indented paragraph interrupts the list
+    if current is not None:
+        questions.append(" ".join(current))
+    return [q for q in questions if q]
 
 
 def card_path(project: Project, cite_key: str) -> Path:
