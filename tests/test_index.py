@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from nfh.ingest import ingest_local, reembed
-from nfh.search import read_location, search
+from nfh.search import read_location, resolve_location, search
 from nfh.store import Store
 from nfh.verify import verify_quote
 
@@ -116,6 +116,32 @@ def test_read_location_reports_only_the_blocks_it_shows(project):
     assert read["truncated"] is True
     assert read["range"] == "seq:0-1"
     assert "Row two." in read["text"] and "x x x" not in read["text"]
+    store.close()
+
+
+def test_page_locations_handle_roman_cover_and_missing_end_pages(project):
+    store = Store(project)
+    cur = store.conn.execute(
+        "INSERT INTO sources(key, title, cite_key) VALUES('local:pages', 'P', 'p')"
+    )
+    source_id = cur.lastrowid
+    labels = ["C1", "i", "iv", "v", "viii", "1", "2", "79", "80", "82"]
+    store.conn.executemany(
+        "INSERT INTO blocks(source_id, seq, kind, text, page_index, page_label) "
+        "VALUES(?,?,?,?,?,?)",
+        [
+            (source_id, seq, "paragraph", f"text {label}", seq + 1, label)
+            for seq, label in enumerate(labels)
+        ],
+    )
+    store.conn.commit()
+    assert resolve_location(store, source_id, "pp. C1-2") == (0, 6)
+    assert resolve_location(store, source_id, "pp. IV-VIII") == (2, 4)
+    assert resolve_location(store, source_id, "IV-VIII") == (2, 4)
+    assert resolve_location(store, source_id, "pp. 79-81") == (7, 8)
+    assert resolve_location(store, source_id, "pp. 79, 82") == (7, 9)
+    read = read_location(store, source_id, "pp. C1-2", radius=0)
+    assert read["range"] == "seq:0-6" and read["text"].startswith("[p. C1]")
     store.close()
 
 

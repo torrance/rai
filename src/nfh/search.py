@@ -90,10 +90,104 @@ def search(
 
 
 # Locations -------------------------------------------------------------------
-PAGE_RE = re.compile(
-    r"^(?:pp?\.?\s*)?([\divxlcIVXLC]+)(?:\s*[-\u2013]\s*([\divxlc]+))?$"
+PAGE_PREFIX = re.compile(r"^(?:pp?\.?|pages?)\s*(.+)$", re.IGNORECASE)
+PAGE_TOKEN = re.compile(r"^([A-Za-z0-9]+)(?:\s*[-\u2013]\s*([A-Za-z0-9]+))?$")
+BARE_PAGE_SPAN = re.compile(
+    r"^[A-Za-z0-9]+(?:\s*[-\u2013]\s*[A-Za-z0-9]+)?"
+    r"(?:\s*,\s*[A-Za-z0-9]+(?:\s*[-\u2013]\s*[A-Za-z0-9]+)?)*$"
 )
 CHAPTER_RE = re.compile(r"ch(?:apter)?\.?\s*(\d+)(?:\D+(\d+))?", re.IGNORECASE)
+
+
+def _page_parts(loc: str) -> list[tuple[str, str]] | None:
+    match = PAGE_PREFIX.match(loc)
+    if match:
+        body = match.group(1)
+    elif BARE_PAGE_SPAN.match(loc):
+        body = loc
+    else:
+        return None
+    parts = []
+    for piece in re.split(r"\s*,\s*|\s+(?:and|&)\s+", body.strip()):
+        token = PAGE_TOKEN.match(piece.strip())
+        if token is None:
+            return None
+        parts.append((token.group(1), token.group(2) or token.group(1)))
+    return parts or None
+
+
+def _page_index_bounds(
+    store: Store, source_id: int, label: str, *, start: bool
+) -> tuple[int, int] | None:
+    """Page indexes carrying ``label``; when it has no blocks, use its neighbours."""
+    conn = store.conn
+    row = conn.execute(
+        "SELECT min(page_index) a, max(page_index) b FROM blocks "
+        "WHERE source_id=? AND page_label IS NOT NULL "
+        "AND lower(page_label)=lower(?)",
+        (source_id, label),
+    ).fetchone()
+    if row and row["a"] is not None:
+        return row["a"], row["b"]
+    if not label.isdigit():
+        return None
+    # A citation can name a page with no text blocks (e.g. a full-page figure):
+    # for the end of a range, stop at the last labelled page before it.
+    target = int(label)
+    rows = conn.execute(
+        "SELECT DISTINCT page_index, page_label FROM blocks "
+        "WHERE source_id=? AND page_index IS NOT NULL",
+        (source_id,),
+    ).fetchall()
+    numeric = [
+        (r["page_index"], int(r["page_label"]))
+        for r in rows
+        if r["page_label"] and r["page_label"].isdigit()
+    ]
+    candidates = [
+        index
+        for index, number in numeric
+        if (number >= target if start else number <= target)
+    ]
+    if not candidates:
+        return None
+    index = min(candidates) if start else max(candidates)
+    return index, index
+
+
+def _page_span(store: Store, source_id: int, loc: str) -> tuple[int, int] | None:
+    parts = _page_parts(loc)
+    if parts is None:
+        return None
+    conn = store.conn
+    starts: list[int] = []
+    ends: list[int] = []
+    for first_label, last_label in parts:
+        first = _page_index_bounds(store, source_id, first_label, start=True)
+        if first is None:
+            continue
+        last = (
+            first
+            if last_label == first_label
+            else _page_index_bounds(store, source_id, last_label, start=False)
+        )
+        if last is None or last[1] < first[0]:
+            last = first
+        a = conn.execute(
+            "SELECT min(seq) s FROM blocks WHERE source_id=? AND page_index=?",
+            (source_id, first[0]),
+        ).fetchone()
+        b = conn.execute(
+            "SELECT max(seq) s FROM blocks WHERE source_id=? "
+            "AND page_index BETWEEN ? AND ?",
+            (source_id, first[0], last[1]),
+        ).fetchone()
+        if a and a["s"] is not None and b and b["s"] is not None:
+            starts.append(a["s"])
+            ends.append(b["s"])
+    if not starts:
+        return None
+    return min(starts), max(ends)
 
 
 def resolve_location(store: Store, source_id: int, loc: str) -> tuple[int, int] | None:
@@ -116,20 +210,9 @@ def resolve_location(store: Store, source_id: int, loc: str) -> tuple[int, int] 
         row = conn.execute(sql, args).fetchone()
         if row and row["a"] is not None:
             return row["a"], row["b"]
-    if m := PAGE_RE.match(loc):
-        first_label, last_label = m.group(1), m.group(2) or m.group(1)
-        first = conn.execute(
-            "SELECT min(seq) s FROM blocks WHERE source_id=? AND page_label=?",
-            (source_id, first_label),
-        ).fetchone()
-        last = conn.execute(
-            "SELECT max(seq) s FROM blocks WHERE source_id=? AND page_label=?",
-            (source_id, last_label),
-        ).fetchone()
-        if first and first["s"] is not None:
-            return first["s"], (
-                last["s"] if last and last["s"] is not None else first["s"]
-            )
+    span = _page_span(store, source_id, loc)
+    if span is not None:
+        return span
     if m := re.match(r"^paras?\.?\s*(\d+)(?:\s*[-\u2013]\s*(\d+))?$", loc):
         lo, hi = int(m.group(1)), int(m.group(2) or m.group(1))
         row = conn.execute(
