@@ -342,6 +342,8 @@ def test_page_locations_handle_roman_cover_and_missing_end_pages(project):
     assert resolve_location(store, source_id, "pp. 79-81") == (7, 8)
     assert resolve_location(store, source_id, "pp. 79, 82") == (7, 7)
     assert resolve_location_parts(store, source_id, "pp. 79, 82") == [(7, 7), (9, 9)]
+    assert resolve_location(store, source_id, "p. 0") is None
+    assert resolve_location(store, source_id, "pp. 79-999") is None
     read = read_location(store, source_id, "pp. C1-2", radius=0)
     assert read["range"] == "seq:0-6" and read["text"].startswith("[p. C1]")
     store.close()

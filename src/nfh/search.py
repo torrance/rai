@@ -190,7 +190,12 @@ def _page_parts(loc: str) -> list[tuple[str, str]] | None:
 
 
 def _page_index_bounds(
-    store: Store, source_id: int, label: str, *, start: bool
+    store: Store,
+    source_id: int,
+    label: str,
+    *,
+    start: bool,
+    allow_fallback: bool = True,
 ) -> tuple[int, int] | None:
     """Page indexes carrying ``label``; when it has no blocks, use its neighbours."""
     conn = store.conn
@@ -202,10 +207,10 @@ def _page_index_bounds(
     ).fetchone()
     if row and row["a"] is not None:
         return row["a"], row["b"]
-    if not label.isdigit():
+    if not allow_fallback or not label.isdigit():
         return None
-    # A citation can name a page with no text blocks (e.g. a full-page figure):
-    # for the end of a range, stop at the last labelled page before it.
+    # A citation can name a page with no text blocks (e.g. a full-page figure).
+    # Only bridge a small gap; never snap p. 0 or pp. 79-999 to the book's edge.
     target = int(label)
     rows = conn.execute(
         "SELECT DISTINCT page_index, page_label FROM blocks "
@@ -217,10 +222,16 @@ def _page_index_bounds(
         for r in rows
         if r["page_label"] and r["page_label"].isdigit()
     ]
+    if not numeric:
+        return None
+    numbers = [number for _, number in numeric]
+    if target < min(numbers) or target > max(numbers):
+        return None
     candidates = [
         index
         for index, number in numeric
-        if (number >= target if start else number <= target)
+        if abs(number - target) <= 2
+        and (number >= target if start else number <= target)
     ]
     if not candidates:
         return None
@@ -233,16 +244,22 @@ def _page_part_range(
 ) -> tuple[int, int, int, int] | None:
     """(first page, last page, first seq, last seq) for one page interval."""
     conn = store.conn
-    first = _page_index_bounds(store, source_id, first_label, start=True)
-    if first is None:
-        return None
-    last = (
-        first
-        if last_label == first_label
-        else _page_index_bounds(store, source_id, last_label, start=False)
-    )
-    if last is None or last[1] < first[0]:
+    if first_label == last_label:
+        first = _page_index_bounds(
+            store, source_id, first_label, start=True, allow_fallback=False
+        )
+        if first is None:
+            return None
         last = first
+    else:
+        first = _page_index_bounds(
+            store, source_id, first_label, start=True, allow_fallback=True
+        )
+        last = _page_index_bounds(
+            store, source_id, last_label, start=False, allow_fallback=True
+        )
+        if first is None or last is None or last[1] < first[0]:
+            return None
     a = conn.execute(
         "SELECT min(seq) s FROM blocks WHERE source_id=? AND page_index=?",
         (source_id, first[0]),
