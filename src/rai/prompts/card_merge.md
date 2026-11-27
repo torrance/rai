@@ -18,8 +18,10 @@ Write the finished card in the same shape as the card so far:
 - "thesis": 2-4 sentences on what the whole source argues. Keep the existing
   thesis unless a new unit clearly changes it.
 - "structure": in unit order, a summary of each unit with its locations and a
-  one- or two-sentence account of what it argues. Add points for the new units;
-  if a unit contains multiple key ideas, use multiple points.
+  one- or two-sentence account of what it argues. Add points for the new
+  units; use the "loc" from each unit reading (under "_unit") as the
+  locations, repeating it when a unit has several points. Never use a unit's
+  title or a heading as its location. Carry forward existing rows unchanged.
 - "concepts", "claims", "passages", "interlocutors": the most important entries
   across all units so far, merged where units repeat each other. Keep each
   entry's location exactly as given. Keep quotes exactly as given, or drop them.

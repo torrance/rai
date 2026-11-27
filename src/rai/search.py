@@ -173,6 +173,10 @@ CHAPTER_RE = re.compile(r"ch(?:apter)?\.?\s*(\d+)(?:\D+(\d+))?", re.IGNORECASE)
 
 
 def _page_parts(loc: str) -> list[tuple[str, str]] | None:
+    # Models often add a sentence-ending period or a parenthetical gloss.
+    loc = loc.strip()
+    loc = re.sub(r"[.,;:]+$", "", loc).strip()
+    loc = re.sub(r"\s*\([^)]*\)\s*$", "", loc).strip()
     match = PAGE_PREFIX.match(loc)
     if match:
         body = match.group(1)

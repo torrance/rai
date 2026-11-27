@@ -318,12 +318,12 @@ def check_unit(
 
 def check_combined_card(
     store: Store, source_id: int, card: dict[str, Any]
-) -> tuple[dict[str, Any], int, int]:
+) -> tuple[dict[str, Any], int, int, int]:
     """Re-check the model's combined card, which can reintroduce bad entries."""
     ok, dropped = _check_entries(store, source_id, card)
-    dropped += _check_structure(store, source_id, card)
+    structure_dropped = _check_structure(store, source_id, card)
     dropped += _check_passage_quotes(store, source_id, card)
-    return card, ok, dropped
+    return card, ok, dropped, structure_dropped
 
 
 # Rendering -------------------------------------------------------------------
@@ -335,9 +335,12 @@ def render_card(source: Any, card: dict[str, Any]) -> str:
     def cell(text: Any) -> str:
         return str(text).replace("|", "/")
 
-    rows = "\n".join(
-        f"| {cell(s['part'])} | {cell(s['locations'])} | {cell(s['argument'])} |"
-        for s in card.get("structure", [])
+    rows = (
+        "\n".join(
+            f"| {cell(s['part'])} | {cell(s['locations'])} | {cell(s['argument'])} |"
+            for s in card.get("structure", [])
+        )
+        or "| (none recorded) | | |"
     )
 
     def passage(p: dict) -> str:
@@ -518,9 +521,15 @@ def build_card(
 
     say("  combining")
     combined = _combine_units(project, source, outputs, say=say)
-    combined, ok, dropped = check_combined_card(store, source["id"], combined)
+    combined, ok, dropped, structure_dropped = check_combined_card(
+        store, source["id"], combined
+    )
     checked += ok
     dropped_total += dropped
+    checks = f"{checked} locations ok, {dropped_total} entries or quotes dropped"
+    if structure_dropped:
+        rows = "row" if structure_dropped == 1 else "rows"
+        checks += f", {structure_dropped} structure {rows} dropped"
     body = render_card(source, combined)
     path = card_path(project, source["cite_key"])
     if path.exists():
@@ -537,7 +546,7 @@ def build_card(
         "model": card_model_signature(project),
         "prompt_version": PROMPT_VERSION,
         "generated": now()[:10],
-        "checks": f"{checked} locations ok, {dropped_total} entries or quotes dropped",
+        "checks": checks,
     }
     text = write_with_frontmatter(path, meta, body)
     store.record_note(

@@ -207,6 +207,7 @@ def test_card_drops_bad_locations_and_quotes(project, scripted):
     assert "reading" not in STAGES
     meta, _ = cards.read_frontmatter(cards.card_path(project, "writer2024"))
     assert int(meta["checks"].split()[0]) > 0
+    assert "1 structure row dropped" in meta["checks"]
 
     # The corpus map is also built from the open questions, not just cards.
     project.project_md.write_text(
@@ -217,6 +218,20 @@ def test_card_drops_bad_locations_and_quotes(project, scripted):
     results = check_quotes(project)
     assert results and all(r.status == "exact" for r in results)
     store.close()
+
+
+def test_render_card_marks_an_empty_structure():
+    card = {
+        "thesis": "t",
+        "structure": [],
+        "concepts": [],
+        "claims": [],
+        "passages": [],
+        "interlocutors": [],
+        "limits": [],
+    }
+    text = cards.render_card({"title": "T"}, card)
+    assert "| (none recorded) | | |" in text
 
 
 def test_render_card_escapes_pipes_in_table_cells():
