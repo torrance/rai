@@ -18,7 +18,7 @@ TEMPLATE_DIR = PACKAGE_DIR / "templates" / "project"
 PROMPT_DIR = PACKAGE_DIR / "prompts"
 PROJECTS_DIR = HARNESS_ROOT / "projects"
 
-PROMPT_VERSION = "1"
+PROMPT_VERSION = "2"
 
 # The five model slots. Each is a single model reference; there is no fallback.
 CHAT_STAGES = ("reading", "summarising", "research", "sparring")
