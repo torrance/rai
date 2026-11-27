@@ -187,7 +187,9 @@ def open_questions(project: Project) -> list[str]:
         return []
     text = project.project_md.read_text(encoding="utf-8")
     match = re.search(
-        r"^#+\s*Open questions\s*$(.*?)(?=^#+\s|\Z)", text, re.MULTILINE | re.DOTALL
+        r"^#+\s*Open questions\s*$(.*?)(?=^#+\s|\Z)",
+        text,
+        re.MULTILINE | re.DOTALL | re.IGNORECASE,
     )
     if not match:
         return []
@@ -600,11 +602,14 @@ def build_project_note(
     )
     questions = open_questions(project)
     questions_text = "\n".join(questions)
+    project_text = project.project_text.strip()
+    project_hash = text_hash(project_text)
     existing_meta, existing_body = read_frontmatter(path)
     reuse = (
         bool(existing_body)
         and existing_meta.get("card_hash") == text_hash(card_text)
         and existing_meta.get("questions_hash") == text_hash(questions_text)
+        and existing_meta.get("project_hash") == project_hash
         and same_model(existing_meta.get("model"), project.models.summarising)
         and store.note_prompt_current(project.rel(path))
     )
@@ -617,7 +622,9 @@ def build_project_note(
             rel = chat_json(
                 project,
                 load_prompt("card_relevance"),
-                "Open questions:\n"
+                "Project (project.md):\n"
+                + (project_text or "(project.md is empty)")
+                + "\n\nOpen questions, with the labels to use:\n"
                 + "\n".join(f"Q{i + 1}: {q}" for i, q in enumerate(questions))
                 + f"\n\nSource card:\n{card_text}",
                 RELEVANCE_SCHEMA,
@@ -638,6 +645,7 @@ def build_project_note(
         "cite_key": source["cite_key"],
         "card_hash": text_hash(card_text),
         "questions_hash": text_hash(questions_text),
+        "project_hash": project_hash,
         "citations_hash": citations_hash,
         "model": model_identity(project.models.summarising),
     }
@@ -648,6 +656,7 @@ def build_project_note(
         {
             "card": meta["card_hash"],
             "questions": meta["questions_hash"],
+            "project": project_hash,
             "citations": citations_hash,
         },
         model_identity(project.models.summarising),
@@ -697,6 +706,7 @@ def stale_sources(project: Project, store: Store) -> list[Any]:
 
 def stale_project_notes(project: Project, store: Store) -> list[Any]:
     questions_hash = text_hash("\n".join(open_questions(project)))
+    project_hash = text_hash(project.project_text.strip())
     out = []
     for source in store.sources():
         card = card_path(project, source["cite_key"])
@@ -708,6 +718,7 @@ def stale_project_notes(project: Project, store: Store) -> list[Any]:
         if (
             meta.get("card_hash") != card_hash
             or meta.get("questions_hash") != questions_hash
+            or meta.get("project_hash") != project_hash
             or meta.get("citations_hash")
             != _citations_hash(project, source["cite_key"])
             or not same_model(meta.get("model"), project.models.summarising)

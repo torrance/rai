@@ -18,7 +18,7 @@ TEMPLATE_DIR = PACKAGE_DIR / "templates" / "project"
 PROMPT_DIR = PACKAGE_DIR / "prompts"
 PROJECTS_DIR = HARNESS_ROOT / "projects"
 
-PROMPT_VERSION = "2"
+PROMPT_VERSION = "3"
 
 # The five model slots. Each is a single model reference; there is no fallback.
 CHAT_STAGES = ("reading", "summarising", "research", "sparring")
@@ -291,6 +291,14 @@ class Project:
     @property
     def project_md(self) -> Path:
         return self.root / "project.md"
+
+    @property
+    def project_text(self) -> str:
+        return (
+            self.project_md.read_text(encoding="utf-8")
+            if self.project_md.exists()
+            else ""
+        )
 
     @property
     def reading_list(self) -> Path:

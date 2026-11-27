@@ -115,12 +115,15 @@ def _cards(project: Project, store: Store) -> list[dict[str, Any]]:
     return out
 
 
-def _hashes(cards: list[dict[str, Any]], questions: list[str]) -> dict[str, str]:
+def _hashes(
+    cards: list[dict[str, Any]], questions: list[str], project_text: str
+) -> dict[str, str]:
     out: dict[str, str] = {}
     for c in cards:
         out[f"{c['cite_key']}:card"] = text_hash(c["card"])
         out[f"{c['cite_key']}:note"] = text_hash(c["note"])
     out["_questions"] = text_hash("\n".join(questions))
+    out["_project"] = text_hash(project_text)
     return out
 
 
@@ -129,7 +132,7 @@ def map_hashes(project: Project, store: Store) -> dict[str, str]:
     cards = _cards(project, store)
     if not cards:
         return {}
-    return _hashes(cards, open_questions(project))
+    return _hashes(cards, open_questions(project), project.project_text.strip())
 
 
 def _thesis_vectors(store: Store, cards: list[dict]) -> np.ndarray:
@@ -197,9 +200,18 @@ def build_map(
         store.close()
         raise RuntimeError("No cards yet. Run `rai cards` first.")
     questions = open_questions(project)
-    input_hashes = _hashes(cards, questions)
+    project_text = project.project_text.strip()
+    input_hashes = _hashes(cards, questions, project_text)
     coverage_hits = _coverage_hits(store, questions) if questions else "(none)"
     question_text = "\n".join(f"Q{i + 1}: {q}" for i, q in enumerate(questions))
+    project_header = (
+        "Project (project.md):\n"
+        + (project_text or "(project.md is empty)")
+        + "\n\nOpen questions, with the labels to use:\n"
+        + (question_text or "(none)")
+        + "\n\nSearch hits per question:\n"
+        + coverage_hits
+    )
     map_dir = project.corpus_dir
     map_dir.mkdir(parents=True, exist_ok=True)
     json_path = map_dir / "map.json"
@@ -221,8 +233,8 @@ def build_map(
         result = chat_json(
             project,
             load_prompt("corpus_map"),
-            f"Open questions:\n{question_text or '(none)'}\n\n"
-            f"Search hits per question:\n{coverage_hits}\n\nCards:\n\n"
+            project_header
+            + "\n\nCards:\n\n"
             + "\n\n=====\n\n".join(c["card"] + "\n" + c["note"] for c in cards),
             MAP_SCHEMA,
             stage="summarising",
@@ -253,10 +265,10 @@ def build_map(
         result = chat_json(
             project,
             load_prompt("corpus_map"),
-            f"Open questions:\n{question_text or '(none)'}\n\n"
-            f"Search hits per question:\n{coverage_hits}\n\n"
-            f"Themes (already written):\n{json.dumps(themes, ensure_ascii=False)}\n\n"
-            "Claims by source:\n"
+            project_header
+            + "\n\nThemes (already written):\n"
+            + json.dumps(themes, ensure_ascii=False)
+            + "\n\nClaims by source:\n"
             + "\n\n".join(
                 c["cite_key"]
                 + ":\n"

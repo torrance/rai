@@ -433,11 +433,12 @@ def _note_hashes(project: Project) -> dict[str, str]:
         note = note_path(project, path)
         if note.exists():
             out[project.rel(note)] = text_hash(note.read_text(encoding="utf-8"))
+    out["project.md"] = text_hash(project.project_text.strip())
     return out
 
 
 def manuscript_map_stale(project: Project, store: Store) -> bool:
-    """Whether the project map no longer matches the chapter notes or model."""
+    """Whether the project map no longer matches its notes, project.md or model."""
     out = project.manuscript_dir / "map.md"
     note = store.note(project.rel(out))
     current = _note_hashes(project)
@@ -500,10 +501,14 @@ def build_project_map(
         return None
     say("  writing the project-level manuscript map")
     texts = [n.read_text(encoding="utf-8") for n in notes]
+    project_text = project.project_text.strip()
     result = chat_json(
         project,
         load_prompt("manuscript_map"),
-        "\n\n=====\n\n".join(texts),
+        "Project (project.md):\n"
+        + (project_text or "(project.md is empty)")
+        + "\n\nChapter notes:\n\n"
+        + "\n\n=====\n\n".join(texts),
         MAP_SCHEMA,
         stage="summarising",
     )
@@ -527,10 +532,14 @@ def build_project_map(
         ]
     )
     out.write_text(body + "\n", encoding="utf-8")
+    input_hashes = {
+        project.rel(n): text_hash(t) for n, t in zip(notes, texts, strict=True)
+    }
+    input_hashes["project.md"] = text_hash(project_text)
     store.record_note(
         project.rel(out),
         "book_map",
-        {project.rel(n): text_hash(t) for n, t in zip(notes, texts, strict=True)},
+        input_hashes,
         model_identity(project.models.summarising),
         PROMPT_VERSION,
     )

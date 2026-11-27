@@ -398,6 +398,70 @@ def test_prompt_version_invalidates_every_generated_note(project, scripted):
     store.close()
 
 
+def test_project_md_is_passed_whole_and_invalidates_project_notes(
+    project, scripted, monkeypatch
+):
+    project.project_md.write_text(
+        "# T\n\n"
+        "## Thesis\nFlexibility is contested.\n\n"
+        "## Reader\nGeneral readers.\n\n"
+        "## Open questions\n- Is it flexible?\n"
+    )
+    (project.sources_local_dir / "r.md").write_text(SAMPLE)
+    (project.sources_local_dir / "r.md.yaml").write_text("cite_key: writer2024\n")
+    ingest_local(project, say=lambda _: None)
+    draft = project.drafts_dir / "intro.md"
+    draft.write_text("Riders depend on one platform [@writer2024].\n")
+    manuscript.build_manuscript(project, say=lambda _: None)
+    store = Store(project)
+    source = store.source("writer2024")
+    cards.build_card(project, store, source, say=lambda _: None)
+    corpus_map.build_map(project, say=lambda _: None)
+
+    assert cards.stale_project_notes(project, store) == []
+    assert not manuscript.manuscript_map_stale(project, store)
+    assert not compute(project).corpus_map_stale
+
+    # A change outside the open questions still invalidates every project-aware
+    # note, because the whole file is now part of their input.
+    project.project_md.write_text(
+        project.project_md.read_text() + "\n## Scope notes\nRide-hailing only.\n"
+    )
+    assert [s["cite_key"] for s in cards.stale_project_notes(project, store)] == [
+        "writer2024"
+    ]
+    assert manuscript.manuscript_map_stale(project, store)
+    assert compute(project).corpus_map_stale
+
+    seen: list[str] = []
+
+    def capture(module):
+        original = module.chat_json
+
+        def wrapper(*args, **kwargs):
+            seen.append(args[2])
+            return original(*args, **kwargs)
+
+        return wrapper
+
+    monkeypatch.setattr(cards, "chat_json", capture(cards))
+    monkeypatch.setattr(manuscript, "chat_json", capture(manuscript))
+    monkeypatch.setattr(corpus_map, "chat_json", capture(corpus_map))
+
+    cards.build_project_note(project, store, source, say=lambda _: None)
+    manuscript.build_project_map(project, store, say=lambda _: None)
+    corpus_map.build_map(project, say=lambda _: None)
+
+    assert len(seen) == 3
+    assert all("Ride-hailing only." in user for user in seen)
+    store.close()
+
+
+def test_open_questions_heading_is_case_insensitive(project):
+    project.project_md.write_text("# T\n\n## Open Questions\n- Why?\n")
+    assert cards.open_questions(project) == ["Why?"]
+
+
 def test_open_questions_keeps_sub_bullets_and_stops_at_prose(project):
     project.project_md.write_text(
         "# T\n\n"
