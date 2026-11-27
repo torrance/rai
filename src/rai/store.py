@@ -15,7 +15,7 @@ from typing import Any
 
 import numpy as np
 
-from .config import Project, parse_ref
+from .config import PROMPT_VERSION, Project, parse_ref
 
 SCHEMA_VERSION = "1"
 
@@ -437,6 +437,15 @@ class Store:
 
     def note(self, path: str) -> sqlite3.Row | None:
         return self.conn.execute("SELECT * FROM notes WHERE path=?", (path,)).fetchone()
+
+    def note_prompt_current(self, path: str) -> bool:
+        """Whether the note at path was built with the current prompt set.
+
+        A note with no record is treated as stale: it cannot be shown to have
+        been built from the current prompts.
+        """
+        note = self.note(path)
+        return note is not None and note["prompt_version"] == PROMPT_VERSION
 
     def notes(self, kind: str | None = None) -> list[sqlite3.Row]:
         if kind:

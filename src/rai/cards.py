@@ -606,6 +606,7 @@ def build_project_note(
         and existing_meta.get("card_hash") == text_hash(card_text)
         and existing_meta.get("questions_hash") == text_hash(questions_text)
         and same_model(existing_meta.get("model"), project.models.summarising)
+        and store.note_prompt_current(project.rel(path))
     )
     relevance = (
         existing_body.split("\n## Cited in drafts", 1)[0].strip() if reuse else ""
@@ -701,7 +702,8 @@ def stale_project_notes(project: Project, store: Store) -> list[Any]:
         card = card_path(project, source["cite_key"])
         if not card.exists():
             continue
-        meta, _ = read_frontmatter(project_note_path(project, source["cite_key"]))
+        note = project_note_path(project, source["cite_key"])
+        meta, _ = read_frontmatter(note)
         card_hash = text_hash(card.read_text(encoding="utf-8"))
         if (
             meta.get("card_hash") != card_hash
@@ -709,6 +711,7 @@ def stale_project_notes(project: Project, store: Store) -> list[Any]:
             or meta.get("citations_hash")
             != _citations_hash(project, source["cite_key"])
             or not same_model(meta.get("model"), project.models.summarising)
+            or not store.note_prompt_current(project.rel(note))
         ):
             out.append(source)
     return out

@@ -209,8 +209,11 @@ def build_map(
         map_note is not None
         and not same_model(map_note["model"], project.models.summarising)
     )
+    prompt_changed = not store.note_prompt_current(project.rel(map_dir / "map.md"))
     theme_cache: dict[str, Any] = (
-        {} if rebuild or model_changed else previous.get("theme_cache", {})
+        {}
+        if rebuild or model_changed or prompt_changed
+        else previous.get("theme_cache", {})
     )
 
     if len(cards) <= project.limits.corpus_single_pass_cards:

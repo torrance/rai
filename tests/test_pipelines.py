@@ -360,6 +360,44 @@ def test_project_note_staleness_tracks_draft_citations(project, scripted):
     store.close()
 
 
+def test_prompt_version_invalidates_every_generated_note(project, scripted):
+    project.project_md.write_text("# T\n\n## Open questions\n- Is it flexible?\n")
+    (project.sources_local_dir / "r.md").write_text(SAMPLE)
+    (project.sources_local_dir / "r.md.yaml").write_text("cite_key: writer2024\n")
+    ingest_local(project, say=lambda _: None)
+    draft = project.drafts_dir / "intro.md"
+    draft.write_text("Riders depend on one platform [@writer2024].\n")
+    # Map the draft first so the project note sees the citation index.
+    manuscript.build_manuscript(project, say=lambda _: None)
+    store = Store(project)
+    source = store.source("writer2024")
+    cards.build_card(project, store, source, say=lambda _: None)
+    corpus_map.build_map(project, say=lambda _: None)
+
+    assert cards.stale_project_notes(project, store) == []
+    assert manuscript.stale_chapters(project, store) == []
+    assert not manuscript.manuscript_map_stale(project, store)
+    assert not compute(project).corpus_map_stale
+
+    # Notes built by an older prompt set must all be invalidated, not just cards.
+    store.conn.execute("UPDATE notes SET prompt_version='old'")
+    store.conn.commit()
+
+    assert [s["cite_key"] for s in cards.stale_project_notes(project, store)] == [
+        "writer2024"
+    ]
+    assert manuscript.stale_chapters(project, store) == [draft]
+    assert manuscript.manuscript_map_stale(project, store)
+    assert compute(project).corpus_map_stale
+
+    # Rebuilding must actually call the model, not reuse the cached relevance.
+    STAGES.clear()
+    cards.build_project_note(project, store, source, say=lambda _: None)
+    assert "summarising" in STAGES
+    assert cards.stale_project_notes(project, store) == []
+    store.close()
+
+
 def test_open_questions_keeps_sub_bullets_and_stops_at_prose(project):
     project.project_md.write_text(
         "# T\n\n"

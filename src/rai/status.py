@@ -73,7 +73,12 @@ def compute(project: Project) -> Status:
         recorded = json.loads(map_note["input_hashes"]) if map_note else {}
         s.corpus_map_stale = recorded != current or (
             map_note is not None
-            and not same_model(map_note["model"], project.models.summarising)
+            and (
+                not same_model(map_note["model"], project.models.summarising)
+                or not store.note_prompt_current(
+                    project.rel(project.corpus_dir / "map.md")
+                )
+            )
         )
     s.manuscript_map_stale = bool(s.stale_chapters) or manuscript_map_stale(
         project, store

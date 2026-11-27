@@ -403,10 +403,13 @@ def map_chapter(
 def stale_chapters(project: Project, store: Store) -> list[Path]:
     out = []
     for path in draft_files(project):
-        meta, _ = read_frontmatter(note_path(project, path))
-        if meta.get("file_hash") != text_hash(
-            path.read_text(encoding="utf-8")
-        ) or not same_model(meta.get("model"), project.models.summarising):
+        note = note_path(project, path)
+        meta, _ = read_frontmatter(note)
+        if (
+            meta.get("file_hash") != text_hash(path.read_text(encoding="utf-8"))
+            or not same_model(meta.get("model"), project.models.summarising)
+            or not store.note_prompt_current(project.rel(note))
+        ):
             out.append(path)
     return out
 
@@ -443,8 +446,10 @@ def manuscript_map_stale(project: Project, store: Store) -> bool:
     if not current and out.exists():
         return True
     recorded = json.loads(note["input_hashes"] or "{}")
-    return recorded != current or not same_model(
-        note["model"], project.models.summarising
+    return (
+        recorded != current
+        or not same_model(note["model"], project.models.summarising)
+        or not store.note_prompt_current(project.rel(out))
     )
 
 
