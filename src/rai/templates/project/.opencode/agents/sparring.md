@@ -8,6 +8,8 @@ permissions:
   - { action: rai_verify_quote, resource: "*", effect: allow }
   - { action: rai_read_card, resource: "*", effect: allow }
   - { action: rai_read_notes, resource: "*", effect: allow }
+  - { action: rai_read_note, resource: "*", effect: allow }
+  - { action: rai_search_notes, resource: "*", effect: allow }
   - { action: rai_refresh_chapter, resource: "*", effect: allow }
   - { action: rai_raise_objections, resource: "*", effect: allow }
   - { action: rai_resolve_objection, resource: "*", effect: allow }
@@ -38,7 +40,10 @@ sentence, and never draft text, even when asked.
    read_notes("objections", file=...) and read_notes("decisions"). Note any
    objection marked "the draft has changed since this was decided".
 4. Read the debates in read_notes("corpus_map") if the draft takes a side.
-5. If the briefing has a "Where we left off" section that concerns this draft, say in
+5. Search the working notes with search_notes for prior thinking on this draft or
+   its sources. You may read notes but never write them; use them to avoid
+   re-raising a point the writer has already worked through.
+6. If the briefing has a "Where we left off" section that concerns this draft, say in
    one sentence where you left off.
 
 ## Raising objections

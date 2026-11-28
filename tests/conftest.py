@@ -80,9 +80,10 @@ def fake_ollama(monkeypatch):
     def embed_query(project, query):
         return fake_vectors([query])[0]
 
-    for module in ("rai.embed", "rai.ingest", "rai.cards"):
+    for module in ("rai.embed", "rai.ingest", "rai.cards", "rai.note_search"):
         monkeypatch.setattr(f"{module}.embed_texts", embed_texts, raising=False)
     monkeypatch.setattr("rai.search.embed_query", embed_query)
+    monkeypatch.setattr("rai.note_search.embed_query", embed_query, raising=False)
     return embed_texts
 
 

@@ -67,6 +67,30 @@ def test_commands_point_at_existing_agents():
         assert agent is None or agent in agents
 
 
+def test_working_note_permissions_split_by_agent():
+    def allows(agent: str, action: str) -> bool:
+        return any(
+            rule["action"] == action and rule["effect"] == "allow"
+            for rule in frontmatter(AGENTS / f"{agent}.md")["permissions"]
+        )
+
+    writes = (
+        "rai_save_note",
+        "rai_save_notes",
+        "rai_revise_note",
+        "rai_set_note_status",
+    )
+    reads = ("rai_read_notes", "rai_read_note", "rai_search_notes")
+    for action in writes + reads:
+        assert allows("assistant", action), f"assistant cannot {action}"
+    for action in reads:
+        assert allows("sparring", action), f"sparring cannot {action}"
+    for action in writes:
+        assert not allows("sparring", action), f"sparring can {action}"
+    for action in writes + reads:
+        assert not allows("reader", action), f"reader can {action}"
+
+
 def test_subagent_permission_targets_the_reader():
     reader = frontmatter(AGENTS / "reader.md")
     assert reader["mode"] == "subagent"

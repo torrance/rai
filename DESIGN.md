@@ -215,7 +215,8 @@ projects/my-essay/
     │   ├── decisions.jsonl
     │   ├── reading.jsonl
     │   ├── candidates.jsonl
-    │   └── sessions.jsonl
+    │   ├── sessions.jsonl
+    │   └── notes.jsonl        # the assistant's working notes
     └── logs/
 ```
 
@@ -241,6 +242,9 @@ to commit as you wish.
 | `chunks_vec` | sqlite-vec vector index (when sqlite-vec is available). |
 | `units` | Cached per-unit card readings, keyed by source and unit number, with prompt version and model. |
 | `notes` | Metadata for every generated note file: kind, input hashes, model, prompt version, generation time. Used for staleness. |
+| `working_notes` | Derived, rebuildable search index over `.rai/ledger/notes.jsonl`: title, abstract, body, status, sources/links, hashes and embedding. |
+| `working_notes_fts` | FTS5 keyword index over working-note title, abstract and body. |
+| `working_notes_vec` | sqlite-vec vector index over working-note title + abstract (when sqlite-vec is available). |
 | `claims` | Claims extracted from drafts: chapter, paragraph, claim text, type, cited keys, status, evidence, active flag. |
 | `meta` | Schema version and embedding setup (`embed_ref`, model, dimensions, document template). |
 
@@ -309,6 +313,7 @@ authoritative record of what you decided.
 | **Decision** | Something you explicitly stated (“keep the Weber comparison”), with an ID (`D1`, …). It can be withdrawn with `revoke_decision`. |
 | **Reading status** | How much of a source you say you have read: `not read`, `skimmed`, `read`, `studied`. |
 | **Session summary** | A `/wrap` record of one conversation: what was discussed, new understandings, where you left off, reports saved. ID `S1`, … A corrected summary can replace an earlier one with `replaces`. |
+| **Working note** | The assistant's durable, free-form knowledge: a title, a maintained abstract, a body, sources, verified evidence and links. ID `N1`, … Active or deleted; deleted notes are an archive. Written only when you ask. |
 | **Candidate decision** | Shortlisted, dismissed, or proposed again. |
 
 Objection statuses:
@@ -537,6 +542,7 @@ claims supported by only one source. These are prompts to look, not verdicts.
 - open objections, decisions
 - unknown citations
 - stale notes
+- working-note count and a pointer to `read_notes("notes")` (no note content)
 - “Where we left off” from the latest session summary
 
 It is limited to roughly 3,000 tokens, so it fits in every agent's starting
@@ -573,6 +579,7 @@ Agent tools append JSONL events:
 - `set_reading_status`
 - `propose_candidate`, `decide_candidate`
 - `record_session`
+- `save_note`, `save_notes`, `revise_note`, `set_note_status` (working notes)
 
 The next session's brief and `read_notes` views reconstruct current state from
 the latest events. Never edit ledger files by hand; tell the agent what you
@@ -604,6 +611,7 @@ OpenCode starts in the project
         │
         ▼
   /wrap → record_session → brief rebuilt for next time
+  /remember → save_notes → working notes and their index
 ```
 
 Permissions enforce the “writer writes” rule:
@@ -661,7 +669,8 @@ Output goes to `.rai/logs/hook.log`. Your commit does not wait for it.
 4. Rebuild stale project notes.
 5. Rebuild the corpus map if its inputs changed.
 6. Map changed drafts, extract claims, rebuild the manuscript map.
-7. Rebuild `.rai/brief.md`.
+7. Rebuild the working-note search index from the ledger.
+8. Rebuild `.rai/brief.md`.
 
 Targeted commands do one part only: `rai ingest`, `rai cards`, `rai map`,
 `rai manuscript`, `rai brief`.
@@ -854,7 +863,8 @@ Useful commands:
 | Group | Tools |
 | --- | --- |
 | Search/read | `search_passages`, `read_location`, `verify_quote` |
-| Notes | `read_card`, `read_notes`, `refresh_card`, `refresh_chapter` |
+| Notes | `read_card`, `read_notes`, `read_note`, `search_notes`, `refresh_card`, `refresh_chapter` |
+| Working notes (assistant writes) | `save_note`, `save_notes`, `revise_note`, `set_note_status`; Sparring gets `read_note`/`search_notes` only |
 | Claims | `update_claim` |
 | Decisions | `raise_objections`, `resolve_objection`, `record_decision`, `revoke_decision`, `set_reading_status`, `record_session` |
 | Candidates | `read_candidate`, `read_candidate_section`, `save_candidate`, `save_candidates`, `decide_candidate` |
@@ -864,6 +874,8 @@ Useful commands:
 | Command | What it does |
 | --- | --- |
 | `/wrap` | Record unrecorded decisions and summarise the conversation for next time |
+| `/remember [focus]` | Record durable working knowledge from the conversation as revisable notes |
+| `/tend` | Review active notes for duplication and propose a consolidation plan |
 | `/check-claims` | Check unchecked claims in a draft file against the library |
 
 ---
@@ -886,10 +898,11 @@ Useful commands:
 | `corpus_map.py` | Library themes, debates, coverage, gaps |
 | `manuscript.py` | Draft parsing, chapter notes, claims, manuscript map |
 | `claims.py` | Claims ledger rendering/status |
-| `ledger.py` | JSONL objections/decisions/reading/candidates/sessions |
+| `ledger.py` | JSONL objections/decisions/reading/candidates/sessions/working notes |
+| `note_search.py` | Derived working-note index and hybrid note search |
 | `candidates.py` | Candidate lookup, full text, reading list |
 | `brief.py` | Deterministic session briefing |
-| `notes.py` | Read-only views of internal notes |
+| `notes.py` | Read-only views of internal notes and working notes |
 | `render.py` | OpenCode config/agent/hook generation and sync |
 | `status.py` | Staleness and health summary |
 
@@ -903,6 +916,10 @@ Useful commands:
   draft.**
 - **Candidates are outside the library until you add them.**
 - **The ledger is your memory; the brief is what the agents read at startup.**
+- **Sessions are episodic; working notes are semantic; decisions are
+  authoritative.** A session summary says what happened in one conversation; a
+  working note holds what the assistant has come to understand and can be revised
+  across conversations; a decision is yours and binding.
 - **Maps point, sources prove.** Search and cards tell you where to look;
   `read_location` and `verify_quote` establish what is actually there.
 - **The writer writes; the agents research, critique and record.**

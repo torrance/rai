@@ -12,7 +12,7 @@ except ImportError:  # pragma: no cover - mcp 1.x
     from mcp.server.fastmcp import FastMCP
 
 from . import candidates as cand
-from . import ledger
+from . import ledger, note_search
 from . import notes as notes_view
 from .brief import build_brief
 from .cards import build_card
@@ -47,6 +47,15 @@ the writer has decided. How the tools fit together:
   confirm in one line what you recorded.
 - /wrap asks you to summarise the conversation: record it with record_session
   (what was discussed, new understandings, where you left off).
+- Working notes (save_note, save_notes, revise_note, set_note_status) are the
+  assistant's durable, free-form knowledge. Write them only when the writer asks
+  (/remember, "remember this", or a directed /wrap). Search first with
+  search_notes and revise rather than duplicate. Notes are prior thinking, not
+  evidence: facts still come from read_location and quotations from
+  verify_quote. /tend consolidates notes by deleting the old ones and creating a
+  linked replacement. Deleted notes remain readable with include_deleted=True
+  and cannot be reactivated. Sparring may read and search notes; the Reader has
+  no note access, so pass anything relevant in its prompt.
 - refresh_card / refresh_chapter rebuild a stale note; they take minutes.
 - read_candidate, read_candidate_section, save_candidate and save_candidates are
   for texts that are not in the library yet.
@@ -60,6 +69,16 @@ def make_server(project: Project) -> FastMCP:
 
     def store() -> Store:
         return Store(project)
+
+    def reindex_notes() -> str:
+        try:
+            result = note_search.sync_index(project)
+            return str(result.get("warning", ""))
+        except Exception as exc:  # noqa: BLE001 - a note is still saved
+            return (
+                "The note was saved, but the search index could not be updated "
+                f"({exc}); run `rai refresh`."
+            )
 
     @mcp.tool()
     def search_passages(
@@ -187,16 +206,182 @@ def make_server(project: Project) -> FastMCP:
             s.close()
 
     @mcp.tool()
-    def read_notes(what: str, file: str = "", status: str = "", limit: int = 0) -> str:
+    def read_notes(
+        what: str,
+        file: str = "",
+        status: str = "",
+        limit: int = 0,
+        note_id: str = "",
+        include_deleted: bool = False,
+        source: str = "",
+    ) -> str:
         """Read one of the project's internal notes.
 
         what: brief | corpus_map | manuscript_map | chapter_note (with file=, a
         draft path) | claims | objections (optionally file=, and status= open,
         will_address, answered, dismissed or unresolved) | decisions | reading |
         sources | candidates | sessions (summaries of past conversations, newest
-        first; limit= how many, default 5).
+        first; limit= how many, default 5) | notes (working notes; status=
+        active, deleted or all; source= filters by cite key) | note (with
+        note_id=, e.g. N7; include_deleted=True for an archived note).
         """
-        return notes_view.read_notes(project, what, file, status, limit)
+        return notes_view.read_notes(
+            project,
+            what,
+            file,
+            status,
+            limit,
+            note_id,
+            include_deleted,
+            source,
+        )
+
+    @mcp.tool()
+    def read_note(note_id: str, include_deleted: bool = False) -> str:
+        """Read one working note in full, including evidence and links.
+
+        Deleted notes need include_deleted=True. They remain archived and cannot
+        be revised or reactivated.
+        """
+        return notes_view.read_note(project, note_id, include_deleted)
+
+    @mcp.tool()
+    def search_notes(
+        query: str, limit: int = 8, include_deleted: bool = False
+    ) -> list[dict]:
+        """Semantic + keyword search over working notes.
+
+        Use this before writing a note, to find one to revise instead of
+        duplicating it. Returns id, title, abstract, status, sources, revised and
+        score; call read_note for the body. Active notes only unless
+        include_deleted=True. Notes are prior thinking, not source evidence.
+        """
+        try:
+            return note_search.search_notes(
+                project, query, limit=min(limit, 20), include_deleted=include_deleted
+            )
+        except (ValueError, RuntimeError) as exc:
+            return [{"error": str(exc)}]
+
+    @mcp.tool()
+    def save_note(
+        title: str,
+        abstract: str,
+        body: str = "",
+        sources: list[str] | None = None,
+        evidence: list[dict] | None = None,
+        links: dict | None = None,
+    ) -> dict:
+        """Record one working note. Only when the writer asks you to.
+
+        title: a short handle. abstract: a one- or two-sentence gist, maintained
+        as the note changes. body: free-form, as long as it needs to be. sources:
+        cite keys or candidate ids the note is about. evidence: list of
+        {"cite_key", "location", "quote"?}; quotations are checked against the
+        library before they are stored. links: {"notes": [...], "decisions":
+        [...], "objections": [...], "sessions": [...], "questions": [...]}.
+        Returns the new id (N1...) and any warnings.
+        """
+        result = ledger.create_note(
+            project, title, abstract, body, sources, evidence, links
+        )
+        if result.get("ok"):
+            warning = reindex_notes()
+            if warning:
+                result.setdefault("warnings", []).append(warning)
+            build_brief(project)
+        return result
+
+    @mcp.tool()
+    def save_notes(notes: list[dict]) -> dict:
+        """Record several working notes in one call (for /remember).
+
+        Each entry has the same fields as save_note. Returns one result per entry
+        plus saved and errors counts.
+        """
+        if not notes:
+            return {"ok": False, "error": "No notes supplied."}
+        results = []
+        saved = errors = 0
+        for entry in notes:
+            if not isinstance(entry, dict):
+                results.append({"ok": False, "error": "Each note must be an object."})
+                errors += 1
+                continue
+            result = ledger.create_note(
+                project,
+                title=str(entry.get("title", "")),
+                abstract=str(entry.get("abstract", "")),
+                body=str(entry.get("body", "")),
+                sources=entry.get("sources"),
+                evidence=entry.get("evidence"),
+                links=entry.get("links"),
+            )
+            if result.get("ok"):
+                saved += 1
+            else:
+                errors += 1
+            results.append(result)
+        warning = reindex_notes() if saved else ""
+        if saved:
+            build_brief(project)
+        return {
+            "ok": True,
+            "saved": saved,
+            "errors": errors,
+            "results": results,
+            "warning": warning,
+        }
+
+    @mcp.tool()
+    def revise_note(
+        note_id: str,
+        title: str | None = None,
+        abstract: str | None = None,
+        body: str | None = None,
+        sources: list[str] | None = None,
+        evidence: list[dict] | None = None,
+        links: dict | None = None,
+    ) -> dict:
+        """Append a revised version of an active working note, keeping history.
+
+        Supply only the fields that change; the rest are kept. The abstract must
+        still be a short, accurate gist after the revision. Deleted notes cannot
+        be revised: create a new note and link the old one.
+        """
+        result = ledger.revise_note(
+            project, note_id, title, abstract, body, sources, evidence, links
+        )
+        if result.get("ok"):
+            warning = reindex_notes()
+            if warning:
+                result.setdefault("warnings", []).append(warning)
+            build_brief(project)
+        return result
+
+    @mcp.tool()
+    def set_note_status(note_id: str, status: str, note: str = "") -> dict:
+        """Move a working note to the archive. Only status="deleted" is accepted.
+
+        Deleted notes stay in the ledger, are readable with include_deleted=True,
+        and cannot be reactivated or revised. To consolidate, delete the old
+        notes and create a new note that links them.
+        """
+        if str(status).strip().lower() != "deleted":
+            return {
+                "ok": False,
+                "error": (
+                    "Only status='deleted' is accepted. Deleted notes cannot be "
+                    "reactivated; create a new note instead."
+                ),
+            }
+        result = ledger.delete_note(project, note_id, note)
+        if result.get("ok"):
+            warning = reindex_notes()
+            if warning:
+                result.setdefault("warnings", []).append(warning)
+            build_brief(project)
+        return result
 
     @mcp.tool()
     def raise_objections(file: str, objections: list[dict[str, str]]) -> list[dict]:
@@ -256,6 +441,7 @@ def make_server(project: Project) -> FastMCP:
         agent: str = "",
         reports: list[str] | None = None,
         replaces: str = "",
+        notes: list[str] | None = None,
     ) -> dict:
         """Record a summary of this conversation (what /wrap asks for).
 
@@ -263,10 +449,18 @@ def make_server(project: Project) -> FastMCP:
         that arose, one sentence each (not decisions; empty if none). left_off: where
         you stopped and what's next. agent: your name. reports: files you saved in
         reports/. replaces: an earlier summary id (S1...) the writer corrected.
+        notes: working-note ids (N1...) touched in this conversation, if any.
         The next conversation starts with this in its briefing.
         """
         result = ledger.record_session(
-            project, discussed, understandings, left_off, agent, reports, replaces
+            project,
+            discussed,
+            understandings,
+            left_off,
+            agent,
+            reports,
+            replaces,
+            notes,
         )
         if result.get("ok"):
             build_brief(project)

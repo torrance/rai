@@ -25,6 +25,8 @@ WHAT = {
     "sources": "the library inventory: authors, titles, sizes, reading and citations",
     "candidates": "works proposed for reading and what the writer decided",
     "sessions": "past conversations: what was discussed, understood, where it stopped",
+    "notes": "working notes: durable, revisable knowledge the assistant recorded",
+    "note": "one working note in full (note_id=), with evidence and links",
 }
 NOT_BUILT = "Not built yet. Run `rai refresh`."
 
@@ -68,6 +70,8 @@ def _sessions(project: Project, limit: int) -> str:
         lines.append(f"  Left off: {item['left_off'] or '-'}")
         if item["reports"]:
             lines.append(f"  Reports: {', '.join(item['reports'])}")
+        if item.get("notes"):
+            lines.append(f"  Notes: {', '.join(item['notes'])}")
         out.append("\n".join(lines))
     if len(items) > len(shown):
         out.append(
@@ -132,8 +136,112 @@ def _sources(project: Project) -> str:
         store.close()
 
 
+def _notes_survey(project: Project, status: str, limit: int, source: str = "") -> str:
+    if status not in {"", "active", "deleted", "all"}:
+        return "status for notes must be active, deleted or all."
+    items = ledger.list_notes(project, status=status, source=source)
+    if not items:
+        if status == "deleted":
+            return "No deleted working notes."
+        if source:
+            return f"No working notes cite {source!r}."
+        return "No working notes yet. /remember records them when the writer asks."
+    shown = items[: limit or 20]
+    out = []
+    for note in shown:
+        marker = " [deleted]" if note["status"] == "deleted" else ""
+        lines = [f"{note['id']}{marker}  {note['title']}", f"    {note['abstract']}"]
+        if note["sources"]:
+            lines.append(f"    Sources: {', '.join(note['sources'])}")
+        lines.append(f"    Revised: {note['revised']}")
+        out.append("\n".join(lines))
+    if len(items) > len(shown):
+        out.append(f'({len(items) - len(shown)} more; read_notes("notes", limit=N))')
+    return "\n\n".join(out)
+
+
+def _note_evidence(note: dict) -> str:
+    lines = []
+    for entry in note["evidence"]:
+        key = entry["cite_key"]
+        location = entry.get("location", "")
+        line = f"  - [@{key}, {location}]" if location else f"  - [@{key}]"
+        if entry.get("quote"):
+            line += f' "{entry["quote"]}"'
+        if entry.get("verified"):
+            line += f" ({entry['verified']})"
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def _note_links(note: dict) -> str:
+    parts = []
+    for key in ("notes", "decisions", "objections", "sessions", "questions"):
+        values = note["links"].get(key) or []
+        if values:
+            parts.append(f"{key} {', '.join(values)}")
+    return "; ".join(parts)
+
+
+def read_note(project: Project, note_id: str, include_deleted: bool = False) -> str:
+    note = ledger.note(project, note_id)
+    if note is None:
+        return f"No note {note_id!r}."
+    if note["status"] == "deleted" and not include_deleted:
+        return (
+            f"{note['id']} is deleted. It remains in the ledger as an archive; "
+            "read it with include_deleted=True. Deleted notes cannot be revised "
+            "or reactivated."
+        )
+    marker = " [deleted]" if note["status"] == "deleted" else ""
+    lines = [
+        f"{note['id']}{marker}",
+        f"Title: {note['title']}",
+        f"Abstract: {note['abstract']}",
+    ]
+    if note["body"]:
+        lines += ["Body:", note["body"]]
+    lines.append("Sources: " + (", ".join(note["sources"]) if note["sources"] else "-"))
+    if note["evidence"]:
+        lines += ["Evidence:", _note_evidence(note)]
+    if links := _note_links(note):
+        lines.append(f"Links: {links}")
+    lines.append(f"Created: {note['created']}; Revised: {note['revised']}")
+    if note["deleted_at"]:
+        lines.append(f"Deleted: {note['deleted_at']}")
+        if note["delete_note"]:
+            lines.append(f"Delete note: {note['delete_note']}")
+    return "\n".join(lines)
+
+
+def note_history_text(project: Project, note_id: str) -> str:
+    events = ledger.note_history(project, note_id)
+    if not events:
+        return f"No note {note_id!r}."
+    out = []
+    for event in events:
+        line = f"{event['ts'][:16]} {event['event']}"
+        if event.get("title"):
+            line += f": {event['title']}"
+        if event.get("from"):
+            line += f": {event['from']} -> {event['to']}"
+        if event.get("changed"):
+            line += f" ({', '.join(event['changed'])})"
+        if event.get("note"):
+            line += f" - {event['note']}"
+        out.append(line)
+    return "\n".join(out)
+
+
 def read_notes(
-    project: Project, what: str, file: str = "", status: str = "", limit: int = 0
+    project: Project,
+    what: str,
+    file: str = "",
+    status: str = "",
+    limit: int = 0,
+    note_id: str = "",
+    include_deleted: bool = False,
+    source: str = "",
 ) -> str:
     key = what.strip().lower().replace("-", "_").replace(" ", "_")
     if key == "brief":
@@ -192,5 +300,12 @@ def read_notes(
         )
     if key == "sessions":
         return _sessions(project, limit)
+    if key == "notes":
+        return _notes_survey(project, status, limit, source)
+    if key == "note":
+        target = (note_id or file).strip()
+        if not target:
+            return "note needs note_id= (for example N7)."
+        return read_note(project, target, include_deleted)
     options = ", ".join(WHAT)
     return f"Unknown notes {what!r}. Choose one of: {options}."

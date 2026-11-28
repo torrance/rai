@@ -563,6 +563,16 @@ def status() -> None:
     c = s.claims
     say(f"Claims: {c.get('total', 0)} " + str(c.get("by_status", {})))
     say(f"Unresolved objections: {s.open_objections}; decisions: {s.decisions}")
+    say(f"Working notes: {s.active_notes} active, {s.deleted_notes} deleted")
+    if s.notes_citing_missing_sources:
+        typer.secho(
+            "Working notes cite sources no longer in the library: "
+            + ", ".join(s.notes_citing_missing_sources)
+            + " (the notes are kept; recheck their evidence)",
+            fg="yellow",
+        )
+    if s.note_index_problem:
+        typer.secho(s.note_index_problem, fg="yellow")
     if s.unknown_citations:
         typer.secho(
             "Drafts cite keys that aren't in the index: "
@@ -590,19 +600,56 @@ def show(
         str,
         typer.Argument(
             help="brief, corpus_map, manuscript_map, chapter_note, claims, "
-            "objections, decisions, reading, sources, candidates or sessions"
+            "objections, decisions, reading, sources, candidates, sessions, "
+            "notes or note"
         ),
     ],
+    target: Annotated[str, typer.Argument(help="For note: the id, e.g. N7")] = "",
     file: Annotated[str, typer.Option(help="A draft file (for chapter_note)")] = "",
     status: Annotated[
-        str, typer.Option(help="For objections: open, will_address, answered, ...")
+        str,
+        typer.Option(
+            help="For objections: open, will_address, ...; for notes: "
+            "active, deleted, all"
+        ),
     ] = "",
     limit: Annotated[
-        int, typer.Option(help="For sessions: how many, newest first (default 5)")
+        int,
+        typer.Option(help="For sessions or notes: how many, newest first"),
     ] = 0,
+    source: Annotated[
+        str, typer.Option(help="For notes: only those citing this cite key")
+    ] = "",
+    history: Annotated[
+        bool, typer.Option("--history", help="For note: show its event history")
+    ] = False,
+    include_deleted: Annotated[
+        bool,
+        typer.Option("--include-deleted", help="For note: allow an archived note"),
+    ] = False,
 ) -> None:
     """Print one of the project's internal notes. You never need to; you can."""
-    say(read_notes(_project(), what, file, status, limit))
+    from .notes import note_history_text
+
+    project = _project()
+    if what.strip().lower() == "note" and history:
+        if not target.strip():
+            say("note needs an id (for example N7).")
+            return
+        say(note_history_text(project, target))
+        return
+    say(
+        read_notes(
+            project,
+            what,
+            file=file,
+            status=status,
+            limit=limit,
+            note_id=target,
+            include_deleted=include_deleted,
+            source=source,
+        )
+    )
 
 
 @app.command()
@@ -610,12 +657,20 @@ def check(
     files: Annotated[
         list[Path] | None, typer.Argument(help="Note files to check")
     ] = None,
+    all_notes: Annotated[
+        bool,
+        typer.Option("--all", help="Also check quotations in deleted working notes"),
+    ] = False,
 ) -> None:
-    """Verify every cited quotation in reports/ and in source cards."""
+    """Verify every cited quotation in reports/, source cards and working notes."""
     from .check import check_quotes
 
     project = _project()
-    results = check_quotes(project, [f.resolve() for f in files] if files else None)
+    results = check_quotes(
+        project,
+        [f.resolve() for f in files] if files else None,
+        include_deleted=all_notes,
+    )
     bad = 0
     for r in results:
         colour = {"exact": "green", "near": "yellow", "elsewhere": "yellow"}.get(
@@ -740,6 +795,7 @@ def refresh(
     from .corpus_map import build_map
     from .ingest import ingest_local, ingest_zotero
     from .manuscript import build_manuscript
+    from .note_search import sync_index
     from .status import compute
     from .store import Store
     from .zotero import ZoteroError
@@ -768,6 +824,9 @@ def refresh(
     store.close()
     if compute(project).corpus_map_stale:
         build_map(project, say=say)
+    note_result = sync_index(project)
+    if note_result.get("warning"):
+        typer.secho(note_result["warning"], fg="yellow")
     build_brief(project)
     say("Refresh complete.")
 

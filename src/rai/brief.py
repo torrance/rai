@@ -130,6 +130,17 @@ def build_brief(project: Project) -> str:
         )
         + stale,
     ]
+    notes = ledger.notes_state(project)
+    active_notes = sum(1 for n in notes.values() if n["status"] == "active")
+    deleted_notes = sum(1 for n in notes.values() if n["status"] == "deleted")
+    if active_notes or deleted_notes:
+        line = f"- {active_notes} active"
+        if deleted_notes:
+            line += f", {deleted_notes} deleted"
+        line += '. read_notes("notes") to survey; search_notes to find one.'
+    else:
+        line = "- No working notes yet."
+    parts.append("## Working notes\n" + line)
     decisions = ledger.list_decisions(project)
     decision_index: int | None = None
     if decisions:
@@ -139,7 +150,9 @@ def build_brief(project: Project) -> str:
     parts.append(
         "## Where to look\n"
         "- read_notes: corpus_map, manuscript_map, chapter_note (file=), claims, "
-        "objections, decisions, reading, sources, candidates\n"
+        "objections, decisions, reading, sources, candidates, notes\n"
+        "- read_note (id) and search_notes: working notes are prior thinking, "
+        "not source evidence\n"
         "- read_card: a source's card\n"
         "- The writer's decisions reach you only through conversation: record "
         "them with the tools as they are made"

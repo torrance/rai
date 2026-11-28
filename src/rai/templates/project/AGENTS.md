@@ -26,7 +26,20 @@ files. The conversation is the only channel, so:
 - When the writer runs /wrap, summarise the conversation with record_session: what
   was discussed, the new understandings that arose (insights, connections and
   corrections, not decisions), and where you left off. Keep it factual, in the
-  writer's terms, and only about this conversation.
+  writer's terms, and only about this conversation. /remember records working
+  notes on request; /tend proposes consolidations and acts only after approval.
+
+## Working notes
+- Working notes are the assistant's durable, free-form knowledge: prior
+  thinking about the material, not evidence. Facts still come from
+  read_location, and quotations from verify_quote.
+- Only the assistant writes them, and only when the writer asks: "remember
+  this", /remember, or a directed /wrap. Never write one unasked.
+- Sparring may read and search them; the Reader has no access and gets anything
+  relevant in its prompt.
+- /tend consolidates notes by deleting the old ones and creating a linked
+  replacement. Deleted notes remain archived, readable with an explicit flag,
+  and are never reactivated or revised.
 
 ## Always
 - Maps point, sources prove. Cards and the notes from read_notes tell you where
@@ -47,7 +60,8 @@ files. The conversation is the only channel, so:
 - A briefing on the whole project is loaded automatically; read_notes("brief")
   if you can't see it.
 - read_notes(what): corpus_map, manuscript_map, chapter_note (with file=),
-  claims, objections, decisions, reading, sources, candidates, sessions.
+  claims, objections, decisions, reading, sources, candidates, sessions, notes.
+- read_note (id) and search_notes: the assistant's working notes.
 - read_card(cite_key): a source's card and how it bears on the project.
 - read_location(cite_key, "toc"): the source's full heading outline, with
   locations to pass back to read_location.

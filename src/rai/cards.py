@@ -787,6 +787,7 @@ def rename_source_notes(project: Project, store: Store, old: str, new: str) -> N
     reading = ledger.reading_statuses(project).get(old)
     if reading:
         ledger.rename_reading_status(project, old, new)
+    ledger.rename_note_sources(project, old, new)
     for src, dest in pairs:
         if not src.exists():
             continue

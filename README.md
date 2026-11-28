@@ -108,7 +108,7 @@ can look at any of it with `rai show` (below).
 | `corpus/` | An overview of your library: themes, debates, coverage, gaps |
 | `manuscript/` | A short note on each draft file, plus a map of the whole draft |
 | `claims.md`, `brief.md` | The claims in your drafts and whether the library supports them; the summary every agent reads at the start |
-| `ledger/` | **Your decisions**: dismissed objections, decisions you stated, what you've read, what you shortlisted, and a summary of each conversation you `/wrap`. Plain text, and the only part of `.rai/` that git tracks, because everything else can be rebuilt and this can't. |
+| `ledger/` | **Your decisions**: dismissed objections, decisions you stated, what you've read, what you shortlisted, a summary of each conversation you `/wrap`, and the assistant's working notes. Plain text, and the only part of `.rai/` that git tracks, because everything else can be rebuilt and this can't. |
 
 Everything in `.rai/` except `ledger/` is rebuilt by `rai refresh`, but slowly
 (every card is a model run), so don't delete it casually.
@@ -767,6 +767,8 @@ rai show reading
 rai show sources              # every indexed source, size, reading status and citations
 rai show candidates
 rai show sessions             # summaries of past conversations; --limit 20 for more
+rai show notes                # the assistant's working notes; --status deleted, --status all
+rai show note N7              # one note in full; --history for its revisions
 rai show corpus_map            # also: brief, manuscript_map, chapter_note --file ..., claims
 ```
 
@@ -783,6 +785,7 @@ records it needs:
 | --- | --- |
 | Your decisions, dismissed objections, what you've read, works you shortlisted | The ledger, recorded as you said them in chat |
 | What each conversation covered, what you came to understand, where you stopped | `/wrap` summaries; the latest is in the briefing |
+| Durable working knowledge: what you've come to understand about the material | Working notes, written only when you ask with `/remember` or "remember this" |
 | Your drafts, the library, the claims | The files, and the notes `rai refresh` rebuilds |
 
 Run `/wrap` before you close a conversation. The agent records anything you decided
@@ -798,11 +801,42 @@ you left off and offers to pick up from there; `read_notes("sessions")` gives th
 agents the fuller summaries, and `rai show sessions` prints them for you. A
 conversation you don't `/wrap` leaves behind only what the agent recorded as you went.
 
+### Remembering what you've read
+
+Session summaries are episodic: they say what happened in one conversation. Working
+notes are semantic: they hold what you have come to understand about the material and
+stay useful across conversations. Each note has a short title, a one- or two-sentence
+abstract, and a free-form body; it can point at sources and store verified quotations,
+and link to decisions, objections, sessions and other notes.
+
+Notes are the assistant's to write, and only when you ask:
+
+- `/remember [focus]` reviews the conversation and records one to five notes. The
+  assistant searches the existing notes first and revises rather than duplicates.
+- "Remember this" mid-conversation does the same for the point at hand.
+- `/wrap` asks whether anything should be remembered, but never writes a note unasked.
+
+`/tend` reviews the active notes for duplication and fragmentation and proposes a
+consolidation plan. It only deletes and creates after you approve. A consolidation
+deletes the old notes and creates a new one that links them; deleted notes stay in the
+ledger as an archive, readable with an explicit flag, but are never reactivated or
+revised.
+
+Notes are prior thinking, not evidence. Facts still come from the sources, and
+quotations are still checked with `verify_quote`. `rai show notes` surveys them;
+`rai show note N7` prints one in full. Sparring may read and search notes so it
+doesn't re-raise a point you've already worked through. The Reader has no note access;
+the assistant passes anything relevant in its prompt.
+
 ### Commands inside OpenCode
 
 - `/check-claims drafts/02-argument.md` has the assistant check every new or
   changed claim in that file against your library, and report the results in the
   chat, contradicted claims first.
+- `/remember [focus]` records the durable working knowledge from the conversation as
+  notes you can revise later.
+- `/tend` reviews the active notes for duplication and proposes a consolidation plan;
+  nothing is deleted or created until you approve.
 - `/wrap` ends a conversation properly: the agent records anything you decided that it
   hasn't yet, then summarises what was discussed, what you came to understand and where
   you left off (see [below](#what-carries-over-to-the-next-conversation)).
@@ -847,6 +881,7 @@ conversation you don't `/wrap` leaves behind only what the agent recorded as you
 | `project.md` | write and edit | read; the assistant proposes edits and you approve each |
 | `reports/` | read | write |
 | `.rai/` | never need to (`rai show` prints it) | write, through their tools |
+| `.rai/ledger/notes.jsonl` (working notes) | read with `rai show`; ask the assistant to change them | the assistant writes them, only when you direct it; Sparring reads them |
 | `opencode.jsonc`, `AGENTS.md`, `.opencode/`, `.githooks/` | change settings, then `rai sync`; you may edit an agent's instructions | read |
 
 Your decisions never need a file edit: say them in the chat.
@@ -863,7 +898,7 @@ Run any command inside a project, or pass `--project PATH` first:
 | `rai new NAME [--title T] [--collection C] [--tag T ...] [--path P] [--no-git]` | Create a project from the template |
 | `rai doctor` | Check Ollama and the OpenCode Go model list, every stage model (local and OpenCode Go), keys, Zotero, pandoc, sqlite-vec, OpenCode, and that project files match the settings |
 | `rai config` | Show every setting in force and which file set it |
-| `rai show WHAT [--file F] [--status S] [--limit N]` | Print an internal note: brief, corpus_map, manuscript_map, chapter_note, claims, objections, decisions, reading, sources, candidates, sessions |
+| `rai show WHAT [--file F] [--status S] [--limit N]` | Print an internal note: brief, corpus_map, manuscript_map, chapter_note, claims, objections, decisions, reading, sources, candidates, sessions, notes, or note ID (with `--history`, `--include-deleted`) |
 | `rai sync [--check] [--force] [--all]` | Bring `opencode.jsonc`, `AGENTS.md`, the agent and command files and the git hook up to date, keeping your edits |
 | `rai ingest` | Index the project's Zotero scope (adds, updates, removes) |
 | `rai ingest --tag T [--tag U] [--match any\|all]` | Only items with these tags, this run only (never removes) |
@@ -873,13 +908,13 @@ Run any command inside a project, or pass `--project PATH` first:
 | `rai ingest --reembed` | Re-embed everything after changing the embedding model |
 | `rai ingest --pdf-engine pymupdf` | Faster, simpler PDF extraction than Docling |
 | `rai inspect KEY [--limit N]` | Show a source's extracted text with locations |
-| `rai status` | Flagged sources, stale notes, claims, unresolved objections and decisions |
+| `rai status` | Flagged sources, stale notes, claims, unresolved objections and decisions, and working-note health |
 | `rai cards [KEY ...] [--all] [--notes-only] [--diff KEY]` | Build stale cards (or given ones); `--diff` shows what changed |
 | `rai map [--rebuild]` | Update the corpus map |
 | `rai manuscript [FILE] [--force]` | Map changed draft files, extract claims |
 | `rai brief` | Rebuild `.rai/brief.md`, the summary every agent reads |
 | `rai refresh [--no-ingest]` | Everything above, in order, only where stale |
-| `rai check [FILES ...]` | Verify every cited quotation in `reports/` and in the cards |
+| `rai check [FILES ...] [--all]` | Verify every cited quotation in `reports/`, the cards and active working notes; `--all` includes deleted notes |
 | `rai open` | Start OpenCode in the project with `.env` loaded |
 | `rai selftest [--slow] [--agents] [--only EXPR]` | Test the real setup (see Testing your setup) |
 | `rai serve` | The MCP server; OpenCode starts it for you |
@@ -992,6 +1027,10 @@ with the old prompt as stale.
   against Docling's source; `--pdf-engine pymupdf` is the tested fallback.
 - **Your decisions rely on the model calling the recording tools.** Each agent
   confirms what it recorded; if it doesn't, say "record that" or run `/wrap`.
+- **Working notes are written only when you ask.** The assistant won't record one on
+  its own initiative; say "remember this", run `/remember`, or ask during `/wrap`.
+  Notes are prior thinking, not evidence, and deleted notes are an archive: readable
+  with an explicit flag, never reactivated.
 - **There is no migration command.** Upgrading an earlier project is a few
   manual steps, [above](#upgrading-a-project-made-with-an-earlier-version); old
   journal entries aren't imported.

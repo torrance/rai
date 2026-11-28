@@ -26,6 +26,10 @@ class Status:
     claims: dict = field(default_factory=dict)
     open_objections: int = 0
     decisions: int = 0
+    active_notes: int = 0
+    deleted_notes: int = 0
+    notes_citing_missing_sources: list[str] = field(default_factory=list)
+    note_index_problem: str = ""
     unknown_citations: list[str] = field(default_factory=list)
 
     @property
@@ -84,12 +88,34 @@ def compute(project: Project) -> Status:
         project, store
     )
     s.claims = summary(store)
+    known = {r["cite_key"] for r in rows}
     citations = project.state_dir / "citations.json"
     if citations.exists():
-        known = {r["cite_key"] for r in rows}
         cited = json.loads(citations.read_text(encoding="utf-8"))
         s.unknown_citations = sorted(k for k in cited if k not in known)
     s.open_objections = len(ledger.list_objections(project, status="unresolved"))
     s.decisions = len(ledger.list_decisions(project))
+    notes = ledger.notes_state(project)
+    s.active_notes = sum(1 for n in notes.values() if n["status"] == "active")
+    s.deleted_notes = sum(1 for n in notes.values() if n["status"] == "deleted")
+
+    def external(key: str) -> bool:
+        key = key.strip()
+        return key.startswith(("http://", "https://")) or (
+            key[:1].upper() == "C" and key[1:].isdigit()
+        )
+
+    s.notes_citing_missing_sources = sorted(
+        {
+            note["id"]
+            for note in notes.values()
+            if note["status"] == "active"
+            for key in note["sources"]
+            if key not in known and not external(key)
+        }
+    )
+    from .note_search import index_problem
+
+    s.note_index_problem = index_problem(project, store)
     store.close()
     return s

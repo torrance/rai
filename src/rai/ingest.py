@@ -338,5 +338,10 @@ def reembed(project: Project, say: Callable[[str], None] = print) -> int:
         store.set_meta("embed_model", ref.model)
         store.set_meta("embed_dims", str(project.models.embedding_dims))
         store.set_meta("embed_doc_template", project.models.document_template)
+        # Working notes use the same embedding setup; rebuild their derived
+        # index here so `rai ingest --reembed` leaves nothing stale behind.
+        from .note_search import sync_index
+
+        sync_index(project, store, rebuild=True)
     store.close()
     return len(rows)

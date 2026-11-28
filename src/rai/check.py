@@ -11,6 +11,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import ledger
 from .cards import read_frontmatter
 from .config import Project
 from .store import Store
@@ -46,32 +47,72 @@ def _check(store: Store, file: str, key: str, loc: str, quote: str) -> QuoteChec
     return QuoteCheck(file, key, loc, quote, result["status"], detail)
 
 
-def check_quotes(project: Project, paths: list[Path] | None = None) -> list[QuoteCheck]:
+def check_note_quotes(
+    project: Project, store: Store, include_deleted: bool = False
+) -> list[QuoteCheck]:
+    """Verify quotations stored in working notes."""
+    results: list[QuoteCheck] = []
+    status = "all" if include_deleted else "active"
+    for note in ledger.list_notes(project, status=status):
+        for entry in note["evidence"]:
+            quote = entry.get("quote", "")
+            if not quote:
+                continue
+            key = entry["cite_key"]
+            loc = entry.get("location", "")
+            if store.source(key) is None:
+                results.append(
+                    QuoteCheck(
+                        f"note {note['id']}",
+                        key,
+                        loc,
+                        quote,
+                        "unverified",
+                        "source is not in the library",
+                    )
+                )
+                continue
+            results.append(_check(store, f"note {note['id']}", key, loc, quote))
+    return results
+
+
+def check_quotes(
+    project: Project,
+    paths: list[Path] | None = None,
+    include_deleted: bool = False,
+) -> list[QuoteCheck]:
     store = Store(project)
     results: list[QuoteCheck] = []
-    files = paths or sorted(project.reports_dir.rglob("*.md"))
-    for path in files:
-        text = path.read_text(encoding="utf-8")
-        for m in NOTE_QUOTE.finditer(text):
-            results.append(
-                _check(
-                    store, project.rel(path), m.group(2), m.group(3) or "", m.group(1)
-                )
-            )
-    if paths is None:
-        for card in sorted(project.cards_dir.glob("*.md")):
-            if card.name.endswith(".prev.md"):
-                continue
-            meta, body = read_frontmatter(card)
-            for m in CARD_QUOTE.finditer(body):
+    try:
+        files = paths or sorted(project.reports_dir.rglob("*.md"))
+        for path in files:
+            text = path.read_text(encoding="utf-8")
+            for m in NOTE_QUOTE.finditer(text):
                 results.append(
                     _check(
                         store,
-                        project.rel(card),
-                        meta.get("cite_key", ""),
-                        m.group(1),
+                        project.rel(path),
                         m.group(2),
+                        m.group(3) or "",
+                        m.group(1),
                     )
                 )
-    store.close()
+        if paths is None:
+            for card in sorted(project.cards_dir.glob("*.md")):
+                if card.name.endswith(".prev.md"):
+                    continue
+                meta, body = read_frontmatter(card)
+                for m in CARD_QUOTE.finditer(body):
+                    results.append(
+                        _check(
+                            store,
+                            project.rel(card),
+                            meta.get("cite_key", ""),
+                            m.group(1),
+                            m.group(2),
+                        )
+                    )
+            results += check_note_quotes(project, store, include_deleted)
+    finally:
+        store.close()
     return results

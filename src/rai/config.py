@@ -257,6 +257,10 @@ class Project:
         return self.state_dir / "ledger"
 
     @property
+    def notes_path(self) -> Path:
+        return self.ledger_dir / "notes.jsonl"
+
+    @property
     def sources_notes_dir(self) -> Path:
         return self.state_dir / "sources"
 

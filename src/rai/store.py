@@ -88,6 +88,27 @@ CREATE TABLE IF NOT EXISTS claims (
 );
 
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
+
+-- Working notes are stored in .rai/ledger/notes.jsonl. These tables are only a
+-- derived, rebuildable search index over that ledger.
+CREATE TABLE IF NOT EXISTS working_notes (
+  rowid INTEGER PRIMARY KEY,
+  note_id TEXT UNIQUE NOT NULL,
+  title TEXT NOT NULL,
+  abstract TEXT NOT NULL,
+  body TEXT NOT NULL,
+  status TEXT NOT NULL,
+  sources_json TEXT NOT NULL,
+  links_json TEXT NOT NULL,
+  revised TEXT NOT NULL,
+  content_hash TEXT NOT NULL,
+  embed_hash TEXT NOT NULL,
+  embedding BLOB
+);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS working_notes_fts USING fts5(
+  note_id UNINDEXED, title, abstract, body, tokenize='porter unicode61'
+);
 """
 
 
@@ -124,6 +145,10 @@ class Store:
         if self.has_vec:
             self.conn.execute(
                 "CREATE VIRTUAL TABLE IF NOT EXISTS chunks_vec "
+                f"USING vec0(embedding float[{self.dims}])"
+            )
+            self.conn.execute(
+                "CREATE VIRTUAL TABLE IF NOT EXISTS working_notes_vec "
                 f"USING vec0(embedding float[{self.dims}])"
             )
         self.set_meta("schema_version", SCHEMA_VERSION)
